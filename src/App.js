@@ -39,7 +39,6 @@ const App = () => {
     PixelStreamingApp = pixelStreaming;
     PixelStreamingUiApp = appStream;
 
-console.log(appStream);
     appStream.onVideoInitialized = () => {
       console.log("VIDEO INITIALIZED");
     };
