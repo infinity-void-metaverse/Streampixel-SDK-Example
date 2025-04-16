@@ -20,7 +20,7 @@ const App = () => {
       StartVideoMuted: true,
       AutoConnect: true,
       useMic: false,
-      appId: "6744fb98094f3b905b08a4fa",
+      appId: "66987bef00e9a75f67b622e4",
       afktimeout:250,
       touchInput:true,
       mouseInput:true,
