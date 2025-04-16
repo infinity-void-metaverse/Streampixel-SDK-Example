@@ -1,0 +1,20 @@
+{
+    "name": "streampixelsdk",
+    "version": "1.0.0",
+    "main": "dist/streampixel-sdk.js",
+    "scripts": {
+        "build": "node build.js && node obfuscate.js"
+    },
+    "keywords": [],
+    "author": "streampixel",
+    "license": "ISC",
+    "description": "",
+    "devDependencies": {
+        "esbuild": "^0.25.2",
+        "javascript-obfuscator": "^4.1.1"
+    },
+    "dependencies": {
+        "@epicgames-ps/lib-pixelstreamingfrontend-ue5.5": "^0.1.4",
+        "@epicgames-ps/lib-pixelstreamingfrontend-ui-ue5.5": "^0.1.0"
+    }
+}
