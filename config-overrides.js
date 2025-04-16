@@ -13,14 +13,18 @@ module.exports = function override(config) {
         "url": require.resolve("url"),
         "zlib": require.resolve("browserify-zlib"),
         "path": require.resolve("path-browserify"),
-    })
+        "process": require.resolve("process/browser")  
+    });
     config.resolve.fallback = fallback;
+
     config.plugins = (config.plugins || []).concat([
         new webpack.ProvidePlugin({
             process: 'process/browser',
             Buffer: ['buffer', 'Buffer']
         })
-    ])
+    ]);
+
     config.ignoreWarnings = [/Failed to parse source map/];
+
     return config;
 }
