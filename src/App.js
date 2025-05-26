@@ -16,11 +16,11 @@ const App = () => {
     
     const { appStream, pixelStreaming } = StreamPixelApplication({
       AutoPlayVideo: true,
-      region:"Asia-pacific",
+      region:"Europe",
       StartVideoMuted: true,
       AutoConnect: true,
       useMic: false,
-      appId: "66987bef00e9a75f67b622e4",
+      appId: "68186dd4fb0a65696afb9526",
       afktimeout:250,
       touchInput:true,
       mouseInput:true,
