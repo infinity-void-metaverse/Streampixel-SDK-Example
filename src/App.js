@@ -16,11 +16,11 @@ const App = () => {
     
     const { appStream, pixelStreaming } = StreamPixelApplication({
       AutoPlayVideo: true,
-      region:"Asia-pacific",
+      region:"Europe",
       StartVideoMuted: true,
       AutoConnect: true,
       useMic: false,
-      appId: "66987bef00e9a75f67b622e4",
+      appId: "68220e94fb0a65696ae613a1",
       afktimeout:250,
       touchInput:true,
       mouseInput:true,
@@ -61,7 +61,7 @@ const App = () => {
  
       console.log("STREAM:MESSAGESEND");
       
-    PixelStreamingUiApp?.stream.emitUIInteraction({ message: "TEST" });
+    PixelStreamingUiApp?.stream.emitUIInteraction({ Message: "A101" });
   };
 
   useEffect(()=>{
