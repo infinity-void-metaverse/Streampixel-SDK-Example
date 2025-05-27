@@ -56,6 +56,14 @@ const App = () => {
 
   };
 
+
+    const handleSendCommand = () => {
+ 
+      console.log("STREAM:MESSAGESEND");
+      
+    PixelStreamingUiApp?.stream.emitUIInteraction({ message: "TEST" });
+  };
+
   useEffect(()=>{
     startPlay();
   },[])
@@ -69,6 +77,7 @@ const App = () => {
     position: "relative"
   }}/>
 
+ <button style={{position:"fixed",bottom:20,right:20,zIndex:1000000}} onClick={handleSendCommand} type="submit">Submit Message</button>
 
    </div>
 
