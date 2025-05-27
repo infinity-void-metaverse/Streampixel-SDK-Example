@@ -61,7 +61,7 @@ const App = () => {
  
       console.log("STREAM:MESSAGESEND");
       
-    PixelStreamingUiApp?.stream.emitUIInteraction({ Console: r.setres 1000x2000w });
+    PixelStreamingUiApp?.stream.emitUIInteraction({ Console: "r.setres 1000x2000w" });
   };
 
   useEffect(()=>{
