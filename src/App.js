@@ -16,7 +16,7 @@ const App = () => {
     
     const { appStream, pixelStreaming } = StreamPixelApplication({
       AutoPlayVideo: true,
-      region:"asia-pacific",
+      region:"asia-Pacific",
       StartVideoMuted: true,
       AutoConnect: true,
       useMic: false,
