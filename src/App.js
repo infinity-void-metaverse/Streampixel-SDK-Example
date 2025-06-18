@@ -1,5 +1,5 @@
 import React, { useEffect, useRef,useState } from 'react';
-import { StreamPixelApplication } from 'streampixelsdk';
+import { StreamPixelApplication } from './streampixelsdk';
 
 
 let PixelStreamingApp;
