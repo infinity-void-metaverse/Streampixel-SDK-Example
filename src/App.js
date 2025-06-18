@@ -1,37 +1,26 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef,useState } from 'react';
 import { StreamPixelApplication } from 'streampixelsdk';
 
 
 let PixelStreamingApp;
 let PixelStreamingUiApp;
+let UIControlApp;
 
 
 const App = () => {
 
   const videoRef = useRef(null);
 
-
+ 
 
   const startPlay = async () => {
     
-    const { appStream, pixelStreaming } = StreamPixelApplication({
-      AutoPlayVideo: true,
-      region:"asia-Pacific",
-      StartVideoMuted: true,
+    const { appStream, pixelStreaming, queueHandler,UIControl} = await StreamPixelApplication({
       AutoConnect: true,
-      useMic: false,
       appId: "66987bef00e9a75f67b622e4",
-      afktimeout:250,
-      touchInput:true,
-      mouseInput:true,
-      gamepadInput:true,
-      resolution:true,
-      hoverMouse:true,
-      xrInput:false,
-      keyBoardInput:true,
-      fakeMouseWithTouches:false,
       resX:1920,
-      resY:1080
+      resY:1080,
+      showUI:true
     });
 
     
@@ -39,11 +28,23 @@ const App = () => {
     PixelStreamingApp = pixelStreaming;
     PixelStreamingUiApp = appStream;
 
+    UIControlApp = UIControl;
+
+
     appStream.onVideoInitialized = () => {
-      console.log("VIDEO INITIALIZED");
+      videoRef.current.append(appStream.rootElement);
+
     };
 
-   videoRef.current.append(appStream.rootElement);
+    queueHandler((msg) => {
+      console.log("User is in queue at position:", msg.position);
+     
+  });
+
+
+    PixelStreamingApp.addResponseEventListener('handle_responses', handleResponseApp);
+
+
 
     const videoElement = appStream && appStream.stream.videoElementParent.querySelector("video");
     if(videoElement){
@@ -56,34 +57,98 @@ const App = () => {
 
   };
 
-
-    const handleSendCommand = () => {
- 
-      console.log("STREAM:MESSAGESEND");
-      
-    PixelStreamingUiApp.stream.emitUIInteraction({ message: "A101" });
-  };
-
   useEffect(()=>{
     startPlay();
   },[])
 
+
+  
+  const handleResponseApp = (response) => {
+ console.log(response);  
+  };
+
+
+  const handleTerminateSession = () => {
+    PixelStreamingApp.disconnect();
+    PixelStreamingUiApp?.stream.disconnect();
+  };
+
+  const handleSendCommand = (descriptor) => {
+ // descriptor = { message: {value:'480p (854x480)',type:"setResolution"} };
+    PixelStreamingUiApp?.stream.emitUIInteraction(descriptor);
+  };
+
+
+
+  const toggleSound = () => {
+
+    if(UIControlApp){
+      UIControlApp.toggleAudio();
+    }
+      
+  }   
+
+
+    const handleRes = (value) => {
+
+    if(UIControlApp){
+      UIControlApp.handleResMax(value);
+    }
+
+  }  
+  const getStats = () => {
+    
+    const stats = UIControlApp.getStreamStats();
+    console.log(stats);
+
+  }
+
+
+
+  const handleMicrophone =async()=>{
+    
+        try {
+          await navigator.mediaDevices.getUserMedia({ audio: true });
+          PixelStreamingApp.unmuteMicrophone(true);
+        } catch (err) {
+          console.error('Microphone access denied', err);
+        }
+
+    }
+  
+
   return (
     
 <div className='containMain'>
-<div id="videoElement" ref={videoRef} style={{
-    backgroundSize: "cover",
-    height: "100vh",
-    position: "relative"
-  }}/>
+  <div
+    id="videoElement"
+    ref={videoRef}
+    style={{
+      backgroundSize: "cover",
+      height: "100vh",
+      position: "relative"
+    }}
+  />
 
- <button style={{position:"fixed",bottom:20,right:20,zIndex:1000000}} onClick={handleSendCommand} type="submit">Submit Message</button>
+  <div style={{
+    position: "fixed",
+    bottom: 20,
+    right: 20,
+    zIndex: 10000000,
+    display: "flex",
+    flexDirection: "row",
+    gap: "10px"
+  }}>
+    <button onClick={() => getStats()}>Stats</button>
+    <button onClick={() => handleMicrophone()}>Mic</button>
+    <button onClick={() => handleRes('854x480')}>Resolution</button>
+    <button onClick={() => toggleSound()}>Toggle Sound</button>
+  </div>
+</div>
 
-   </div>
 
   );
 };
-
 
 export default App;
 
