@@ -11,16 +11,24 @@ const App = () => {
 
   const videoRef = useRef(null);
 
- 
+ //66987bef00e9a75f67b622e4
 
   const startPlay = async () => {
-    
-    const { appStream, pixelStreaming, queueHandler,UIControl} = await StreamPixelApplication({
-      AutoConnect: true,
-      appId: "66987bef00e9a75f67b622e4",
-    });
+
+const appfe = await StreamPixelApplication({
+  AutoConnect: true,
+  appId: "66987bef00e9a75f67b622e4",
+});
+
+if (!appfe) {
+  console.error("StreamPixelApplication returned null");
+  return;
+}
+
+const { appStream, pixelStreaming, queueHandler, UIControl } = appfe;
 
     
+
 
     PixelStreamingApp = pixelStreaming;
     PixelStreamingUiApp = appStream;
