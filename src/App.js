@@ -18,9 +18,6 @@ const App = () => {
     const { appStream, pixelStreaming, queueHandler,UIControl} = await StreamPixelApplication({
       AutoConnect: true,
       appId: "66987bef00e9a75f67b622e4",
-      resX:1920,
-      resY:1080,
-      showUI:true
     });
 
     
@@ -141,7 +138,7 @@ const App = () => {
   }}>
     <button onClick={() => getStats()}>Stats</button>
     <button onClick={() => handleMicrophone()}>Mic</button>
-    <button onClick={() => handleRes('854x480')}>Resolution</button>
+    <button onClick={() => handleRes('1280x720')}>Resolution</button>
     <button onClick={() => toggleSound()}>Toggle Sound</button>
   </div>
 </div>

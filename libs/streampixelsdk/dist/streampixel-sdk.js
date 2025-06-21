@@ -36,38 +36,49 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var require_sdp = __commonJS({
   "node_modules/sdp/dist/sdp.js"(exports, module2) {
     "use strict";
+    var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function(obj) {
+      return typeof obj;
+    } : function(obj) {
+      return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj;
+    };
     var SDPUtils = {};
     SDPUtils.generateIdentifier = function() {
       return Math.random().toString(36).substring(2, 12);
     };
     SDPUtils.localCName = SDPUtils.generateIdentifier();
     SDPUtils.splitLines = function(blob) {
-      return blob.trim().split("\n").map((line) => line.trim());
+      return blob.trim().split("\n").map(function(line) {
+        return line.trim();
+      });
     };
     SDPUtils.splitSections = function(blob) {
-      const parts = blob.split("\nm=");
-      return parts.map((part, index) => (index > 0 ? "m=" + part : part).trim() + "\r\n");
+      var parts = blob.split("\nm=");
+      return parts.map(function(part, index) {
+        return (index > 0 ? "m=" + part : part).trim() + "\r\n";
+      });
     };
     SDPUtils.getDescription = function(blob) {
-      const sections = SDPUtils.splitSections(blob);
+      var sections = SDPUtils.splitSections(blob);
       return sections && sections[0];
     };
     SDPUtils.getMediaSections = function(blob) {
-      const sections = SDPUtils.splitSections(blob);
+      var sections = SDPUtils.splitSections(blob);
       sections.shift();
       return sections;
     };
     SDPUtils.matchPrefix = function(blob, prefix) {
-      return SDPUtils.splitLines(blob).filter((line) => line.indexOf(prefix) === 0);
+      return SDPUtils.splitLines(blob).filter(function(line) {
+        return line.indexOf(prefix) === 0;
+      });
     };
     SDPUtils.parseCandidate = function(line) {
-      let parts;
+      var parts = void 0;
       if (line.indexOf("a=candidate:") === 0) {
         parts = line.substring(12).split(" ");
       } else {
         parts = line.substring(10).split(" ");
       }
-      const candidate = {
+      var candidate = {
         foundation: parts[0],
         component: { 1: "rtp", 2: "rtcp" }[parts[1]] || parts[1],
         protocol: parts[2].toLowerCase(),
@@ -79,7 +90,7 @@ var require_sdp = __commonJS({
         // skip parts[6] == 'typ'
         type: parts[7]
       };
-      for (let i = 8; i < parts.length; i += 2) {
+      for (var i = 8; i < parts.length; i += 2) {
         switch (parts[i]) {
           case "raddr":
             candidate.relatedAddress = parts[i + 1];
@@ -104,9 +115,9 @@ var require_sdp = __commonJS({
       return candidate;
     };
     SDPUtils.writeCandidate = function(candidate) {
-      const sdp = [];
+      var sdp = [];
       sdp.push(candidate.foundation);
-      const component = candidate.component;
+      var component = candidate.component;
       if (component === "rtp") {
         sdp.push(1);
       } else if (component === "rtcp") {
@@ -118,7 +129,7 @@ var require_sdp = __commonJS({
       sdp.push(candidate.priority);
       sdp.push(candidate.address || candidate.ip);
       sdp.push(candidate.port);
-      const type = candidate.type;
+      var type = candidate.type;
       sdp.push("typ");
       sdp.push(type);
       if (type !== "host" && candidate.relatedAddress && candidate.relatedPort) {
@@ -141,8 +152,8 @@ var require_sdp = __commonJS({
       return line.substring(14).split(" ");
     };
     SDPUtils.parseRtpMap = function(line) {
-      let parts = line.substring(9).split(" ");
-      const parsed = {
+      var parts = line.substring(9).split(" ");
+      var parsed = {
         payloadType: parseInt(parts.shift(), 10)
         // was: id
       };
@@ -154,15 +165,15 @@ var require_sdp = __commonJS({
       return parsed;
     };
     SDPUtils.writeRtpMap = function(codec) {
-      let pt = codec.payloadType;
+      var pt = codec.payloadType;
       if (codec.preferredPayloadType !== void 0) {
         pt = codec.preferredPayloadType;
       }
-      const channels = codec.channels || codec.numChannels || 1;
+      var channels = codec.channels || codec.numChannels || 1;
       return "a=rtpmap:" + pt + " " + codec.name + "/" + codec.clockRate + (channels !== 1 ? "/" + channels : "") + "\r\n";
     };
     SDPUtils.parseExtmap = function(line) {
-      const parts = line.substring(9).split(" ");
+      var parts = line.substring(9).split(" ");
       return {
         id: parseInt(parts[0], 10),
         direction: parts[0].indexOf("/") > 0 ? parts[0].split("/")[1] : "sendrecv",
@@ -174,24 +185,24 @@ var require_sdp = __commonJS({
       return "a=extmap:" + (headerExtension.id || headerExtension.preferredId) + (headerExtension.direction && headerExtension.direction !== "sendrecv" ? "/" + headerExtension.direction : "") + " " + headerExtension.uri + (headerExtension.attributes ? " " + headerExtension.attributes : "") + "\r\n";
     };
     SDPUtils.parseFmtp = function(line) {
-      const parsed = {};
-      let kv;
-      const parts = line.substring(line.indexOf(" ") + 1).split(";");
-      for (let j = 0; j < parts.length; j++) {
+      var parsed = {};
+      var kv = void 0;
+      var parts = line.substring(line.indexOf(" ") + 1).split(";");
+      for (var j = 0; j < parts.length; j++) {
         kv = parts[j].trim().split("=");
         parsed[kv[0].trim()] = kv[1];
       }
       return parsed;
     };
     SDPUtils.writeFmtp = function(codec) {
-      let line = "";
-      let pt = codec.payloadType;
+      var line = "";
+      var pt = codec.payloadType;
       if (codec.preferredPayloadType !== void 0) {
         pt = codec.preferredPayloadType;
       }
       if (codec.parameters && Object.keys(codec.parameters).length) {
-        const params = [];
-        Object.keys(codec.parameters).forEach((param) => {
+        var params = [];
+        Object.keys(codec.parameters).forEach(function(param) {
           if (codec.parameters[param] !== void 0) {
             params.push(param + "=" + codec.parameters[param]);
           } else {
@@ -203,31 +214,31 @@ var require_sdp = __commonJS({
       return line;
     };
     SDPUtils.parseRtcpFb = function(line) {
-      const parts = line.substring(line.indexOf(" ") + 1).split(" ");
+      var parts = line.substring(line.indexOf(" ") + 1).split(" ");
       return {
         type: parts.shift(),
         parameter: parts.join(" ")
       };
     };
     SDPUtils.writeRtcpFb = function(codec) {
-      let lines = "";
-      let pt = codec.payloadType;
+      var lines = "";
+      var pt = codec.payloadType;
       if (codec.preferredPayloadType !== void 0) {
         pt = codec.preferredPayloadType;
       }
       if (codec.rtcpFeedback && codec.rtcpFeedback.length) {
-        codec.rtcpFeedback.forEach((fb) => {
+        codec.rtcpFeedback.forEach(function(fb) {
           lines += "a=rtcp-fb:" + pt + " " + fb.type + (fb.parameter && fb.parameter.length ? " " + fb.parameter : "") + "\r\n";
         });
       }
       return lines;
     };
     SDPUtils.parseSsrcMedia = function(line) {
-      const sp = line.indexOf(" ");
-      const parts = {
+      var sp = line.indexOf(" ");
+      var parts = {
         ssrc: parseInt(line.substring(7, sp), 10)
       };
-      const colon = line.indexOf(":", sp);
+      var colon = line.indexOf(":", sp);
       if (colon > -1) {
         parts.attribute = line.substring(sp + 1, colon);
         parts.value = line.substring(colon + 1);
@@ -237,20 +248,22 @@ var require_sdp = __commonJS({
       return parts;
     };
     SDPUtils.parseSsrcGroup = function(line) {
-      const parts = line.substring(13).split(" ");
+      var parts = line.substring(13).split(" ");
       return {
         semantics: parts.shift(),
-        ssrcs: parts.map((ssrc) => parseInt(ssrc, 10))
+        ssrcs: parts.map(function(ssrc) {
+          return parseInt(ssrc, 10);
+        })
       };
     };
     SDPUtils.getMid = function(mediaSection) {
-      const mid = SDPUtils.matchPrefix(mediaSection, "a=mid:")[0];
+      var mid = SDPUtils.matchPrefix(mediaSection, "a=mid:")[0];
       if (mid) {
         return mid.substring(6);
       }
     };
     SDPUtils.parseFingerprint = function(line) {
-      const parts = line.substring(14).split(" ");
+      var parts = line.substring(14).split(" ");
       return {
         algorithm: parts[0].toLowerCase(),
         // algorithm is case-sensitive in Edge.
@@ -259,21 +272,21 @@ var require_sdp = __commonJS({
       };
     };
     SDPUtils.getDtlsParameters = function(mediaSection, sessionpart) {
-      const lines = SDPUtils.matchPrefix(mediaSection + sessionpart, "a=fingerprint:");
+      var lines = SDPUtils.matchPrefix(mediaSection + sessionpart, "a=fingerprint:");
       return {
         role: "auto",
         fingerprints: lines.map(SDPUtils.parseFingerprint)
       };
     };
     SDPUtils.writeDtlsParameters = function(params, setupType) {
-      let sdp = "a=setup:" + setupType + "\r\n";
-      params.fingerprints.forEach((fp) => {
+      var sdp = "a=setup:" + setupType + "\r\n";
+      params.fingerprints.forEach(function(fp) {
         sdp += "a=fingerprint:" + fp.algorithm + " " + fp.value + "\r\n";
       });
       return sdp;
     };
     SDPUtils.parseCryptoLine = function(line) {
-      const parts = line.substring(9).split(" ");
+      var parts = line.substring(9).split(" ");
       return {
         tag: parseInt(parts[0], 10),
         cryptoSuite: parts[1],
@@ -282,13 +295,13 @@ var require_sdp = __commonJS({
       };
     };
     SDPUtils.writeCryptoLine = function(parameters) {
-      return "a=crypto:" + parameters.tag + " " + parameters.cryptoSuite + " " + (typeof parameters.keyParams === "object" ? SDPUtils.writeCryptoKeyParams(parameters.keyParams) : parameters.keyParams) + (parameters.sessionParams ? " " + parameters.sessionParams.join(" ") : "") + "\r\n";
+      return "a=crypto:" + parameters.tag + " " + parameters.cryptoSuite + " " + (_typeof(parameters.keyParams) === "object" ? SDPUtils.writeCryptoKeyParams(parameters.keyParams) : parameters.keyParams) + (parameters.sessionParams ? " " + parameters.sessionParams.join(" ") : "") + "\r\n";
     };
     SDPUtils.parseCryptoKeyParams = function(keyParams) {
       if (keyParams.indexOf("inline:") !== 0) {
         return null;
       }
-      const parts = keyParams.substring(7).split("|");
+      var parts = keyParams.substring(7).split("|");
       return {
         keyMethod: "inline",
         keySalt: parts[0],
@@ -301,12 +314,12 @@ var require_sdp = __commonJS({
       return keyParams.keyMethod + ":" + keyParams.keySalt + (keyParams.lifeTime ? "|" + keyParams.lifeTime : "") + (keyParams.mkiValue && keyParams.mkiLength ? "|" + keyParams.mkiValue + ":" + keyParams.mkiLength : "");
     };
     SDPUtils.getCryptoParameters = function(mediaSection, sessionpart) {
-      const lines = SDPUtils.matchPrefix(mediaSection + sessionpart, "a=crypto:");
+      var lines = SDPUtils.matchPrefix(mediaSection + sessionpart, "a=crypto:");
       return lines.map(SDPUtils.parseCryptoLine);
     };
     SDPUtils.getIceParameters = function(mediaSection, sessionpart) {
-      const ufrag = SDPUtils.matchPrefix(mediaSection + sessionpart, "a=ice-ufrag:")[0];
-      const pwd = SDPUtils.matchPrefix(mediaSection + sessionpart, "a=ice-pwd:")[0];
+      var ufrag = SDPUtils.matchPrefix(mediaSection + sessionpart, "a=ice-ufrag:")[0];
+      var pwd = SDPUtils.matchPrefix(mediaSection + sessionpart, "a=ice-pwd:")[0];
       if (!(ufrag && pwd)) {
         return null;
       }
@@ -316,28 +329,28 @@ var require_sdp = __commonJS({
       };
     };
     SDPUtils.writeIceParameters = function(params) {
-      let sdp = "a=ice-ufrag:" + params.usernameFragment + "\r\na=ice-pwd:" + params.password + "\r\n";
+      var sdp = "a=ice-ufrag:" + params.usernameFragment + "\r\na=ice-pwd:" + params.password + "\r\n";
       if (params.iceLite) {
         sdp += "a=ice-lite\r\n";
       }
       return sdp;
     };
     SDPUtils.parseRtpParameters = function(mediaSection) {
-      const description = {
+      var description = {
         codecs: [],
         headerExtensions: [],
         fecMechanisms: [],
         rtcp: []
       };
-      const lines = SDPUtils.splitLines(mediaSection);
-      const mline = lines[0].split(" ");
+      var lines = SDPUtils.splitLines(mediaSection);
+      var mline = lines[0].split(" ");
       description.profile = mline[2];
-      for (let i = 3; i < mline.length; i++) {
-        const pt = mline[i];
-        const rtpmapline = SDPUtils.matchPrefix(mediaSection, "a=rtpmap:" + pt + " ")[0];
+      for (var i = 3; i < mline.length; i++) {
+        var pt = mline[i];
+        var rtpmapline = SDPUtils.matchPrefix(mediaSection, "a=rtpmap:" + pt + " ")[0];
         if (rtpmapline) {
-          const codec = SDPUtils.parseRtpMap(rtpmapline);
-          const fmtps = SDPUtils.matchPrefix(mediaSection, "a=fmtp:" + pt + " ");
+          var codec = SDPUtils.parseRtpMap(rtpmapline);
+          var fmtps = SDPUtils.matchPrefix(mediaSection, "a=fmtp:" + pt + " ");
           codec.parameters = fmtps.length ? SDPUtils.parseFmtp(fmtps[0]) : {};
           codec.rtcpFeedback = SDPUtils.matchPrefix(mediaSection, "a=rtcp-fb:" + pt + " ").map(SDPUtils.parseRtcpFb);
           description.codecs.push(codec);
@@ -351,28 +364,28 @@ var require_sdp = __commonJS({
           }
         }
       }
-      SDPUtils.matchPrefix(mediaSection, "a=extmap:").forEach((line) => {
+      SDPUtils.matchPrefix(mediaSection, "a=extmap:").forEach(function(line) {
         description.headerExtensions.push(SDPUtils.parseExtmap(line));
       });
-      const wildcardRtcpFb = SDPUtils.matchPrefix(mediaSection, "a=rtcp-fb:* ").map(SDPUtils.parseRtcpFb);
-      description.codecs.forEach((codec) => {
-        wildcardRtcpFb.forEach((fb) => {
-          const duplicate = codec.rtcpFeedback.find((existingFeedback) => {
+      var wildcardRtcpFb = SDPUtils.matchPrefix(mediaSection, "a=rtcp-fb:* ").map(SDPUtils.parseRtcpFb);
+      description.codecs.forEach(function(codec2) {
+        wildcardRtcpFb.forEach(function(fb) {
+          var duplicate = codec2.rtcpFeedback.find(function(existingFeedback) {
             return existingFeedback.type === fb.type && existingFeedback.parameter === fb.parameter;
           });
           if (!duplicate) {
-            codec.rtcpFeedback.push(fb);
+            codec2.rtcpFeedback.push(fb);
           }
         });
       });
       return description;
     };
     SDPUtils.writeRtpDescription = function(kind, caps) {
-      let sdp = "";
+      var sdp = "";
       sdp += "m=" + kind + " ";
       sdp += caps.codecs.length > 0 ? "9" : "0";
       sdp += " " + (caps.profile || "UDP/TLS/RTP/SAVPF") + " ";
-      sdp += caps.codecs.map((codec) => {
+      sdp += caps.codecs.map(function(codec) {
         if (codec.preferredPayloadType !== void 0) {
           return codec.preferredPayloadType;
         }
@@ -380,13 +393,13 @@ var require_sdp = __commonJS({
       }).join(" ") + "\r\n";
       sdp += "c=IN IP4 0.0.0.0\r\n";
       sdp += "a=rtcp:9 IN IP4 0.0.0.0\r\n";
-      caps.codecs.forEach((codec) => {
+      caps.codecs.forEach(function(codec) {
         sdp += SDPUtils.writeRtpMap(codec);
         sdp += SDPUtils.writeFmtp(codec);
         sdp += SDPUtils.writeRtcpFb(codec);
       });
-      let maxptime = 0;
-      caps.codecs.forEach((codec) => {
+      var maxptime = 0;
+      caps.codecs.forEach(function(codec) {
         if (codec.maxptime > maxptime) {
           maxptime = codec.maxptime;
         }
@@ -395,30 +408,36 @@ var require_sdp = __commonJS({
         sdp += "a=maxptime:" + maxptime + "\r\n";
       }
       if (caps.headerExtensions) {
-        caps.headerExtensions.forEach((extension) => {
+        caps.headerExtensions.forEach(function(extension) {
           sdp += SDPUtils.writeExtmap(extension);
         });
       }
       return sdp;
     };
     SDPUtils.parseRtpEncodingParameters = function(mediaSection) {
-      const encodingParameters = [];
-      const description = SDPUtils.parseRtpParameters(mediaSection);
-      const hasRed = description.fecMechanisms.indexOf("RED") !== -1;
-      const hasUlpfec = description.fecMechanisms.indexOf("ULPFEC") !== -1;
-      const ssrcs = SDPUtils.matchPrefix(mediaSection, "a=ssrc:").map((line) => SDPUtils.parseSsrcMedia(line)).filter((parts) => parts.attribute === "cname");
-      const primarySsrc = ssrcs.length > 0 && ssrcs[0].ssrc;
-      let secondarySsrc;
-      const flows = SDPUtils.matchPrefix(mediaSection, "a=ssrc-group:FID").map((line) => {
-        const parts = line.substring(17).split(" ");
-        return parts.map((part) => parseInt(part, 10));
+      var encodingParameters = [];
+      var description = SDPUtils.parseRtpParameters(mediaSection);
+      var hasRed = description.fecMechanisms.indexOf("RED") !== -1;
+      var hasUlpfec = description.fecMechanisms.indexOf("ULPFEC") !== -1;
+      var ssrcs = SDPUtils.matchPrefix(mediaSection, "a=ssrc:").map(function(line) {
+        return SDPUtils.parseSsrcMedia(line);
+      }).filter(function(parts) {
+        return parts.attribute === "cname";
+      });
+      var primarySsrc = ssrcs.length > 0 && ssrcs[0].ssrc;
+      var secondarySsrc = void 0;
+      var flows = SDPUtils.matchPrefix(mediaSection, "a=ssrc-group:FID").map(function(line) {
+        var parts = line.substring(17).split(" ");
+        return parts.map(function(part) {
+          return parseInt(part, 10);
+        });
       });
       if (flows.length > 0 && flows[0].length > 1 && flows[0][0] === primarySsrc) {
         secondarySsrc = flows[0][1];
       }
-      description.codecs.forEach((codec) => {
+      description.codecs.forEach(function(codec) {
         if (codec.name.toUpperCase() === "RTX" && codec.parameters.apt) {
-          let encParam = {
+          var encParam = {
             ssrc: primarySsrc,
             codecPayloadType: parseInt(codec.parameters.apt, 10)
           };
@@ -441,7 +460,7 @@ var require_sdp = __commonJS({
           ssrc: primarySsrc
         });
       }
-      let bandwidth = SDPUtils.matchPrefix(mediaSection, "b=");
+      var bandwidth = SDPUtils.matchPrefix(mediaSection, "b=");
       if (bandwidth.length) {
         if (bandwidth[0].indexOf("b=TIAS:") === 0) {
           bandwidth = parseInt(bandwidth[0].substring(7), 10);
@@ -450,28 +469,32 @@ var require_sdp = __commonJS({
         } else {
           bandwidth = void 0;
         }
-        encodingParameters.forEach((params) => {
+        encodingParameters.forEach(function(params) {
           params.maxBitrate = bandwidth;
         });
       }
       return encodingParameters;
     };
     SDPUtils.parseRtcpParameters = function(mediaSection) {
-      const rtcpParameters = {};
-      const remoteSsrc = SDPUtils.matchPrefix(mediaSection, "a=ssrc:").map((line) => SDPUtils.parseSsrcMedia(line)).filter((obj) => obj.attribute === "cname")[0];
+      var rtcpParameters = {};
+      var remoteSsrc = SDPUtils.matchPrefix(mediaSection, "a=ssrc:").map(function(line) {
+        return SDPUtils.parseSsrcMedia(line);
+      }).filter(function(obj) {
+        return obj.attribute === "cname";
+      })[0];
       if (remoteSsrc) {
         rtcpParameters.cname = remoteSsrc.value;
         rtcpParameters.ssrc = remoteSsrc.ssrc;
       }
-      const rsize = SDPUtils.matchPrefix(mediaSection, "a=rtcp-rsize");
+      var rsize = SDPUtils.matchPrefix(mediaSection, "a=rtcp-rsize");
       rtcpParameters.reducedSize = rsize.length > 0;
       rtcpParameters.compound = rsize.length === 0;
-      const mux = SDPUtils.matchPrefix(mediaSection, "a=rtcp-mux");
+      var mux = SDPUtils.matchPrefix(mediaSection, "a=rtcp-mux");
       rtcpParameters.mux = mux.length > 0;
       return rtcpParameters;
     };
     SDPUtils.writeRtcpParameters = function(rtcpParameters) {
-      let sdp = "";
+      var sdp = "";
       if (rtcpParameters.reducedSize) {
         sdp += "a=rtcp-rsize\r\n";
       }
@@ -484,29 +507,33 @@ var require_sdp = __commonJS({
       return sdp;
     };
     SDPUtils.parseMsid = function(mediaSection) {
-      let parts;
-      const spec = SDPUtils.matchPrefix(mediaSection, "a=msid:");
+      var parts = void 0;
+      var spec = SDPUtils.matchPrefix(mediaSection, "a=msid:");
       if (spec.length === 1) {
         parts = spec[0].substring(7).split(" ");
         return { stream: parts[0], track: parts[1] };
       }
-      const planB = SDPUtils.matchPrefix(mediaSection, "a=ssrc:").map((line) => SDPUtils.parseSsrcMedia(line)).filter((msidParts) => msidParts.attribute === "msid");
+      var planB = SDPUtils.matchPrefix(mediaSection, "a=ssrc:").map(function(line) {
+        return SDPUtils.parseSsrcMedia(line);
+      }).filter(function(msidParts) {
+        return msidParts.attribute === "msid";
+      });
       if (planB.length > 0) {
         parts = planB[0].value.split(" ");
         return { stream: parts[0], track: parts[1] };
       }
     };
     SDPUtils.parseSctpDescription = function(mediaSection) {
-      const mline = SDPUtils.parseMLine(mediaSection);
-      const maxSizeLine = SDPUtils.matchPrefix(mediaSection, "a=max-message-size:");
-      let maxMessageSize;
+      var mline = SDPUtils.parseMLine(mediaSection);
+      var maxSizeLine = SDPUtils.matchPrefix(mediaSection, "a=max-message-size:");
+      var maxMessageSize = void 0;
       if (maxSizeLine.length > 0) {
         maxMessageSize = parseInt(maxSizeLine[0].substring(19), 10);
       }
       if (isNaN(maxMessageSize)) {
         maxMessageSize = 65536;
       }
-      const sctpPort = SDPUtils.matchPrefix(mediaSection, "a=sctp-port:");
+      var sctpPort = SDPUtils.matchPrefix(mediaSection, "a=sctp-port:");
       if (sctpPort.length > 0) {
         return {
           port: parseInt(sctpPort[0].substring(12), 10),
@@ -514,9 +541,9 @@ var require_sdp = __commonJS({
           maxMessageSize
         };
       }
-      const sctpMapLines = SDPUtils.matchPrefix(mediaSection, "a=sctpmap:");
+      var sctpMapLines = SDPUtils.matchPrefix(mediaSection, "a=sctpmap:");
       if (sctpMapLines.length > 0) {
-        const parts = sctpMapLines[0].substring(10).split(" ");
+        var parts = sctpMapLines[0].substring(10).split(" ");
         return {
           port: parseInt(parts[0], 10),
           protocol: parts[1],
@@ -525,7 +552,7 @@ var require_sdp = __commonJS({
       }
     };
     SDPUtils.writeSctpDescription = function(media, sctp) {
-      let output = [];
+      var output = [];
       if (media.protocol !== "DTLS/SCTP") {
         output = ["m=" + media.kind + " 9 " + media.protocol + " " + sctp.protocol + "\r\n", "c=IN IP4 0.0.0.0\r\n", "a=sctp-port:" + sctp.port + "\r\n"];
       } else {
@@ -540,19 +567,19 @@ var require_sdp = __commonJS({
       return Math.random().toString().substr(2, 22);
     };
     SDPUtils.writeSessionBoilerplate = function(sessId, sessVer, sessUser) {
-      let sessionId;
-      const version = sessVer !== void 0 ? sessVer : 2;
+      var sessionId = void 0;
+      var version = sessVer !== void 0 ? sessVer : 2;
       if (sessId) {
         sessionId = sessId;
       } else {
         sessionId = SDPUtils.generateSessionId();
       }
-      const user = sessUser || "thisisadapterortc";
+      var user = sessUser || "thisisadapterortc";
       return "v=0\r\no=" + user + " " + sessionId + " " + version + " IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n";
     };
     SDPUtils.getDirection = function(mediaSection, sessionpart) {
-      const lines = SDPUtils.splitLines(mediaSection);
-      for (let i = 0; i < lines.length; i++) {
+      var lines = SDPUtils.splitLines(mediaSection);
+      for (var i = 0; i < lines.length; i++) {
         switch (lines[i]) {
           case "a=sendrecv":
           case "a=sendonly":
@@ -568,16 +595,16 @@ var require_sdp = __commonJS({
       return "sendrecv";
     };
     SDPUtils.getKind = function(mediaSection) {
-      const lines = SDPUtils.splitLines(mediaSection);
-      const mline = lines[0].split(" ");
+      var lines = SDPUtils.splitLines(mediaSection);
+      var mline = lines[0].split(" ");
       return mline[0].substring(2);
     };
     SDPUtils.isRejected = function(mediaSection) {
       return mediaSection.split(" ", 2)[1] === "0";
     };
     SDPUtils.parseMLine = function(mediaSection) {
-      const lines = SDPUtils.splitLines(mediaSection);
-      const parts = lines[0].substring(2).split(" ");
+      var lines = SDPUtils.splitLines(mediaSection);
+      var parts = lines[0].substring(2).split(" ");
       return {
         kind: parts[0],
         port: parseInt(parts[1], 10),
@@ -586,8 +613,8 @@ var require_sdp = __commonJS({
       };
     };
     SDPUtils.parseOLine = function(mediaSection) {
-      const line = SDPUtils.matchPrefix(mediaSection, "o=")[0];
-      const parts = line.substring(2).split(" ");
+      var line = SDPUtils.matchPrefix(mediaSection, "o=")[0];
+      var parts = line.substring(2).split(" ");
       return {
         username: parts[0],
         sessionId: parts[1],
@@ -601,15 +628,15 @@ var require_sdp = __commonJS({
       if (typeof blob !== "string" || blob.length === 0) {
         return false;
       }
-      const lines = SDPUtils.splitLines(blob);
-      for (let i = 0; i < lines.length; i++) {
+      var lines = SDPUtils.splitLines(blob);
+      for (var i = 0; i < lines.length; i++) {
         if (lines[i].length < 2 || lines[i].charAt(1) !== "=") {
           return false;
         }
       }
       return true;
     };
-    if (typeof module2 === "object") {
+    if ((typeof module2 === "undefined" ? "undefined" : _typeof(module2)) === "object") {
       module2.exports = SDPUtils;
     }
   }
@@ -19701,7 +19728,7 @@ var require_mixpanel_cjs = __commonJS({
     }
     var Config3 = {
       DEBUG: false,
-      LIB_VERSION: "2.65.0"
+      LIB_VERSION: "2.64.0"
     };
     var MAX_RECORDING_MS = 24 * 60 * 60 * 1e3;
     var MAX_VALUE_FOR_MIN_RECORDING_MS = 8 * 1e3;
@@ -20859,8 +20886,6 @@ var require_mixpanel_cjs = __commonJS({
           return "Microsoft Edge";
         } else if (_.includes(user_agent, "FBIOS")) {
           return "Facebook Mobile";
-        } else if (_.includes(user_agent, "Whale/")) {
-          return "Whale Browser";
         } else if (_.includes(user_agent, "Chrome")) {
           return "Chrome";
         } else if (_.includes(user_agent, "CriOS")) {
@@ -20911,8 +20936,7 @@ var require_mixpanel_cjs = __commonJS({
           "Android Mobile": /android\s(\d+(\.\d+)?)/,
           "Samsung Internet": /SamsungBrowser\/(\d+(\.\d+)?)/,
           "Internet Explorer": /(rv:|MSIE )(\d+(\.\d+)?)/,
-          "Mozilla": /rv:(\d+(\.\d+)?)/,
-          "Whale Browser": /Whale\/(\d+(\.\d+)?)/
+          "Mozilla": /rv:(\d+(\.\d+)?)/
         };
         var regex = versionRegexs[browser];
         if (regex === void 0) {
@@ -22510,9 +22534,7 @@ var require_mixpanel_cjs = __commonJS({
             "$elements": elementsJson,
             "$el_attr__href": href,
             "$viewportHeight": Math.max(docElement["clientHeight"], win["innerHeight"] || 0),
-            "$viewportWidth": Math.max(docElement["clientWidth"], win["innerWidth"] || 0),
-            "$pageHeight": document$1["body"]["offsetHeight"] || 0,
-            "$pageWidth": document$1["body"]["offsetWidth"] || 0
+            "$viewportWidth": Math.max(docElement["clientWidth"], win["innerWidth"] || 0)
           };
           _.each(captureExtraAttrs, function(attr) {
             if (!blockAttrsSet[attr] && target.hasAttribute(attr)) {
@@ -23054,17 +23076,17 @@ var require_mixpanel_cjs = __commonJS({
     FeatureFlagManager.prototype.getConfig = function(key) {
       return this.getFullConfig()[key];
     };
-    FeatureFlagManager.prototype.isSystemEnabled = function() {
+    FeatureFlagManager.prototype.isEnabled = function() {
       return !!this.getMpConfig(FLAGS_CONFIG_KEY);
     };
-    FeatureFlagManager.prototype.areFlagsReady = function() {
-      if (!this.isSystemEnabled()) {
+    FeatureFlagManager.prototype.areFeaturesReady = function() {
+      if (!this.isEnabled()) {
         logger.error("Feature Flags not enabled");
       }
       return !!this.flags;
     };
     FeatureFlagManager.prototype.fetchFlags = function() {
-      if (!this.isSystemEnabled()) {
+      if (!this.isEnabled()) {
         return;
       }
       var distinctId = this.getDistinctId();
@@ -23089,7 +23111,7 @@ var require_mixpanel_cjs = __commonJS({
           _.each(responseFlags, function(data, key) {
             flags.set(key, {
               "key": data["variant_key"],
-              "value": data["variant_value"]
+              "data": data["variant_value"]
             });
           });
           this.flags = flags;
@@ -23099,7 +23121,7 @@ var require_mixpanel_cjs = __commonJS({
       }.bind(this)).catch(function() {
       });
     };
-    FeatureFlagManager.prototype.getVariant = function(featureName, fallback) {
+    FeatureFlagManager.prototype.getFeature = function(featureName, fallback) {
       if (!this.fetchPromise) {
         return new Promise(function(resolve2) {
           logger.critical("Feature Flags not initialized");
@@ -23107,14 +23129,14 @@ var require_mixpanel_cjs = __commonJS({
         });
       }
       return this.fetchPromise.then(function() {
-        return this.getVariantSync(featureName, fallback);
+        return this.getFeatureSync(featureName, fallback);
       }.bind(this)).catch(function(error) {
         logger.error(error);
         return fallback;
       });
     };
-    FeatureFlagManager.prototype.getVariantSync = function(featureName, fallback) {
-      if (!this.areFlagsReady()) {
+    FeatureFlagManager.prototype.getFeatureSync = function(featureName, fallback) {
+      if (!this.areFeaturesReady()) {
         logger.log("Flags not loaded yet");
         return fallback;
       }
@@ -23126,32 +23148,28 @@ var require_mixpanel_cjs = __commonJS({
       this.trackFeatureCheck(featureName, feature);
       return feature;
     };
-    FeatureFlagManager.prototype.getVariantValue = function(featureName, fallbackValue) {
-      return this.getVariant(featureName, { "value": fallbackValue }).then(function(feature) {
-        return feature["value"];
+    FeatureFlagManager.prototype.getFeatureData = function(featureName, fallbackValue) {
+      return this.getFeature(featureName, { "data": fallbackValue }).then(function(feature) {
+        return feature["data"];
       }).catch(function(error) {
         logger.error(error);
         return fallbackValue;
       });
     };
-    FeatureFlagManager.prototype.getFeatureData = function(featureName, fallbackValue) {
-      logger.critical("mixpanel.flags.get_feature_data() is deprecated and will be removed in a future release. Use mixpanel.flags.get_variant_value() instead.");
-      return this.getVariantValue(featureName, fallbackValue);
+    FeatureFlagManager.prototype.getFeatureDataSync = function(featureName, fallbackValue) {
+      return this.getFeatureSync(featureName, { "data": fallbackValue })["data"];
     };
-    FeatureFlagManager.prototype.getVariantValueSync = function(featureName, fallbackValue) {
-      return this.getVariantSync(featureName, { "value": fallbackValue })["value"];
-    };
-    FeatureFlagManager.prototype.isEnabled = function(featureName, fallbackValue) {
-      return this.getVariantValue(featureName).then(function() {
-        return this.isEnabledSync(featureName, fallbackValue);
+    FeatureFlagManager.prototype.isFeatureEnabled = function(featureName, fallbackValue) {
+      return this.getFeatureData(featureName).then(function() {
+        return this.isFeatureEnabledSync(featureName, fallbackValue);
       }.bind(this)).catch(function(error) {
         logger.error(error);
         return fallbackValue;
       });
     };
-    FeatureFlagManager.prototype.isEnabledSync = function(featureName, fallbackValue) {
+    FeatureFlagManager.prototype.isFeatureEnabledSync = function(featureName, fallbackValue) {
       fallbackValue = fallbackValue || false;
-      var val = this.getVariantValueSync(featureName, fallbackValue);
+      var val = this.getFeatureDataSync(featureName, fallbackValue);
       if (val !== true && val !== false) {
         logger.error('Feature flag "' + featureName + '" value: ' + val + " is not a boolean; returning fallback value: " + fallbackValue);
         val = fallbackValue;
@@ -23173,14 +23191,13 @@ var require_mixpanel_cjs = __commonJS({
       return !!fetch2 && typeof Promise !== "undefined" && typeof Map !== "undefined" && typeof Set !== "undefined";
     }
     safewrapClass(FeatureFlagManager);
-    FeatureFlagManager.prototype["are_flags_ready"] = FeatureFlagManager.prototype.areFlagsReady;
-    FeatureFlagManager.prototype["get_variant"] = FeatureFlagManager.prototype.getVariant;
-    FeatureFlagManager.prototype["get_variant_sync"] = FeatureFlagManager.prototype.getVariantSync;
-    FeatureFlagManager.prototype["get_variant_value"] = FeatureFlagManager.prototype.getVariantValue;
-    FeatureFlagManager.prototype["get_variant_value_sync"] = FeatureFlagManager.prototype.getVariantValueSync;
-    FeatureFlagManager.prototype["is_enabled"] = FeatureFlagManager.prototype.isEnabled;
-    FeatureFlagManager.prototype["is_enabled_sync"] = FeatureFlagManager.prototype.isEnabledSync;
+    FeatureFlagManager.prototype["are_features_ready"] = FeatureFlagManager.prototype.areFeaturesReady;
+    FeatureFlagManager.prototype["get_feature"] = FeatureFlagManager.prototype.getFeature;
     FeatureFlagManager.prototype["get_feature_data"] = FeatureFlagManager.prototype.getFeatureData;
+    FeatureFlagManager.prototype["get_feature_data_sync"] = FeatureFlagManager.prototype.getFeatureDataSync;
+    FeatureFlagManager.prototype["get_feature_sync"] = FeatureFlagManager.prototype.getFeatureSync;
+    FeatureFlagManager.prototype["is_feature_enabled"] = FeatureFlagManager.prototype.isFeatureEnabled;
+    FeatureFlagManager.prototype["is_feature_enabled_sync"] = FeatureFlagManager.prototype.isFeatureEnabledSync;
     var DomTracker = function() {
     };
     DomTracker.prototype.create_properties = function() {
@@ -23523,8 +23540,17 @@ var require_mixpanel_cjs = __commonJS({
       var data = this.union_action(list_name, values);
       return this._send_request(data, callback);
     });
-    MixpanelPeople.prototype.track_charge = addOptOutCheckMixpanelPeople(function() {
-      console$1.error("mixpanel.people.track_charge() is deprecated and no longer has any effect.");
+    MixpanelPeople.prototype.track_charge = addOptOutCheckMixpanelPeople(function(amount, properties, callback) {
+      if (!_.isNumber(amount)) {
+        amount = parseFloat(amount);
+        if (isNaN(amount)) {
+          console$1.error("Invalid value passed to mixpanel.people.track_charge - must be a number");
+          return;
+        }
+      }
+      return this.append("$transactions", _.extend({
+        "$amount": amount
+      }, properties), callback);
     });
     MixpanelPeople.prototype.clear_charges = function(callback) {
       return this.set("$transactions", [], callback);
@@ -24041,7 +24067,6 @@ var require_mixpanel_cjs = __commonJS({
     var DEFAULT_CONFIG = {
       "api_host": "https://api-js.mixpanel.com",
       "api_routes": DEFAULT_API_ROUTES,
-      "api_extra_query_params": {},
       "api_method": "POST",
       "api_transport": "XHR",
       "api_payload_format": PAYLOAD_TYPE_BASE64,
@@ -24464,7 +24489,6 @@ var require_mixpanel_cjs = __commonJS({
         body_data = "data=" + encodeURIComponent(data["data"]);
         delete data["data"];
       }
-      _.extend(data, this.get_config("api_extra_query_params"));
       url += "?" + _.HTTPBuildQuery(data);
       var lib = this;
       if ("img" in data) {
@@ -24959,8 +24983,6 @@ var require_mixpanel_cjs = __commonJS({
         "distinct_id": DEVICE_ID_PREFIX + uuid,
         "$device_id": uuid
       }, "");
-      this.stop_session_recording();
-      this._check_and_start_session_recording();
     };
     MixpanelLib.prototype.get_distinct_id = function() {
       return this.get_property("distinct_id");
@@ -33601,6 +33623,7 @@ var require_UIControllerNew = __commonJS({
             clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(() => {
               this.handleResize();
+              console.log("RESIZE");
             }, 200);
           });
         }
@@ -33610,6 +33633,7 @@ var require_UIControllerNew = __commonJS({
         audioElement.play();
         audioElement.muted = !this.audioEnabled;
         this.audioEnabled = !this.audioEnabled;
+        console.log(`Audio ${this.audioEnabled ? "on" : "muted"}`);
       }
       handleResMax(value) {
         const hwsplit = value.split("x");
@@ -33625,6 +33649,7 @@ var require_UIControllerNew = __commonJS({
         }
       }
       handleResize() {
+        console.log("HANDLERESIZECALL");
         const viewportH = Math.floor(window.innerHeight * window.devicePixelRatio);
         const viewportW = Math.floor(window.innerWidth * window.devicePixelRatio);
         const maxPixel = Math.floor(this.maxHeight * this.maxWidth);
@@ -33984,9 +34009,7 @@ async function StreamPixelApplication(settings) {
       maxWidth
     };
     let UIControl;
-    if (settings.showUI == true) {
-      UIControl = new UIControllerNew(uiControlOptions);
-    }
+    UIControl = new UIControllerNew(uiControlOptions);
     const postState = (value) => {
       window.parent.postMessage({ type: "stream-state", value }, "*");
     };
