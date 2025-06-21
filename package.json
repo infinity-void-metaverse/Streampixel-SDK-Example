@@ -14,7 +14,7 @@
     "react-scripts": "^5.0.1",
     "stream-browserify": "^3.0.0",
     "stream-http": "^3.2.0",
-    "streampixelsdk": "file:streampixelsdk"
+    "streampixelsdk": "git+https://github.com/infinity-void-metaverse/Streampixel-Web-SDK.git#staging"
   },
   "scripts": {
     "start": "react-scripts start"
