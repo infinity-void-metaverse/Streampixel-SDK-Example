@@ -5,6 +5,9 @@
   "scripts": {
     "build": "node build.js"
   },
+  "exports": {
+    ".": "./dist/streampixel-sdk.js"
+  },
   "license": "ISC",
   "devDependencies": {
     "esbuild": "^0.25.2",
