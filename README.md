@@ -1,16 +1,16 @@
-# StreamPixel WebSDK Integration Example
+# StreamPixel WebSDK Example
 
-This repository contains an example project demonstrating how to integrate the StreamPixel WebSDK into a custom frontend application using React.
+This is an example project demonstrating how to integrate the latest StreamPixel WebSDK into a React application. It showcases how to initialize the stream, handle runtime interactions, and access essential controls and diagnostics.
 
-## 🚀 What’s Inside
+## 📦 Features Demonstrated
 
-- Basic setup of StreamPixel's WebSDK
-- Example usage with key runtime actions
-- Queue handling, resolution settings, audio controls, and more
-- Easily customizable template for your own integration
-
-## 📘 Full Documentation
-
-For complete usage instructions, available configuration options, and advanced controls, please refer to our official documentation:
-
-👉 [WebSDK Integration Guide](https://docs.streampixel.io/resources/custom-integration-guide/websdk-integration)
+- 🔌 **Stream Initialization** via `StreamPixelApplication()`
+- 🎥 **Video Embedding** with dynamic DOM injection
+- 🧠 **Queue Handling** (user position)
+- 🎛️ **Runtime Controls**:
+  - Toggle Sound
+  - Enable Microphone
+  - Change Resolution
+  - View Stats
+  - Fetch Available Resolution Options
+- 🔄 **Response Listener** (`handle_responses`)
