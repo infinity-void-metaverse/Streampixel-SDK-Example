@@ -35,6 +35,10 @@ const App = () => {
    //   startResolutionTab:'1080p (1920x1080)',
    //   startResolution:"720p (1280x720)",
    //   resolutionMode:"Fixed Resolution Mode"     ["Fixed Resolution Mode"|| "Crop on Resize Mode" || "Dynamic Resolution Mode"]
+   //minBitrate:1
+   //maxBitrate:100
+   //maxQP:-1
+   //minQP:20
     });
 
     
