@@ -48,11 +48,28 @@ const App = () => {
 
     UIControlApp = UIControl;
 
+        appStream.onConnectAction = function() {
+          console.log("Starting connection to Streampixel server, please wait");
+    }
+
+        appStream.onWebRtcConnecting = function() {
+          console.log("Almost there, hold tight- awesomeness loading");
+    }
+            appStream.onWebRtcConnected = function() {
+          console.log("Sharpening pixels and buffing the details...");
+    }
+
 
     appStream.onVideoInitialized = () => {
       videoRef.current.append(appStream.rootElement);
 
     };
+
+     appStream.onDisconnect = function() {
+          console.log("Disconnectd");
+    }
+
+    
 
     queueHandler((msg) => {
       console.log("User is in queue at position:", msg.position);
