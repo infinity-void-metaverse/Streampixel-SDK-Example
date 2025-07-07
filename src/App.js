@@ -185,7 +185,7 @@ function getRandom4DigitNumber() {
   />
 
   */}
-  <VoiceChatUI roomName="TESTROOM" userName={newUserName} voiceChat={false}/>
+  <VoiceChatUI roomName="TESTROOM" userName={newUserName} voiceChat={true}/>
 
   <div style={{
     position: "fixed",
