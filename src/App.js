@@ -1,11 +1,10 @@
 import React, { useEffect, useRef,useState } from 'react';
 import {StreamPixelApplication} from 'streampixelsdk';
-
+import VoiceChatUI from './components/VoiceChatUI';
 
 let PixelStreamingApp;
 let PixelStreamingUiApp;
 let UIControlApp;
-
 
 const App = () => {
 
@@ -43,6 +42,7 @@ const App = () => {
 
     
 
+    
     PixelStreamingApp = pixelStreaming;
     PixelStreamingUiApp = appStream;
 
@@ -93,8 +93,9 @@ const App = () => {
   };
 
   useEffect(()=>{
-    startPlay();
+   // startPlay();
   },[])
+
 
 
   
@@ -131,25 +132,27 @@ const App = () => {
     }
 
   }  
-  const getStats = () => {
+  const getStats = async() => {
 
-    
-    const stats = UIControlApp.getStreamStats();
-    console.log("stats:",stats);
-
+    //const stats = UIControlApp.getStreamStats();
+   // console.log("stats:",stats);
 
   
     }
 
 
-    const getResolutionOptions = () =>{
+    const getResolutionOptions = async() =>{
 
-      
-    const resolutionSettings  = UIControlApp.getResolution();
-    console.log("resolutionSettings:",resolutionSettings);
+
+   // const resolutionSettings  = UIControlApp.getResolution();
+   // console.log("resolutionSettings:",resolutionSettings);
 
     }
 
+
+function getRandom4DigitNumber() {
+    return Math.floor(Math.random() * 9000) + 1000;
+}
 
 
   const handleMicrophone =async()=>{
@@ -163,11 +166,15 @@ const App = () => {
 
     }
   
+    
+      const newUserName = "yuvraj"+getRandom4DigitNumber();
+    
 
   return (
     
 <div className='containMain'>
-  <div
+  
+  {/*<div
     id="videoElement"
     ref={videoRef}
     style={{
@@ -176,6 +183,9 @@ const App = () => {
       position: "relative"
     }}
   />
+
+  */}
+  <VoiceChatUI roomName="TESTROOM" userName={newUserName} voiceChat={false}/>
 
   <div style={{
     position: "fixed",

@@ -1,0 +1,117 @@
+.chat-container {
+  border: 1px solid #ccc;
+  width: 400px;
+  margin: auto;
+  font-family: Arial;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.tab-buttons {
+  display: flex;
+  border-bottom: 1px solid #ccc;
+}
+
+.tab-buttons button {
+  flex: 1;
+  padding: 10px;
+  cursor: pointer;
+  border: none;
+  background: #f4f4f4;
+  font-weight: bold;
+}
+
+.tab-buttons .active {
+  background: #e0e0e0;
+}
+
+.text-tab {
+  display: flex;
+  flex-direction: column;
+  height: 400px;
+}
+
+.messages {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.message-box {
+  margin-bottom: 10px;
+  max-width: 70%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  position: relative;
+}
+
+.local {
+  background: #d1e7dd;
+  align-self: flex-start;
+  text-align: left;
+}
+
+.remote {
+  background: #f8d7da;
+  align-self: flex-end;
+  text-align: right;
+}
+
+.timestamp {
+  font-size: 0.75rem;
+  margin-top: 4px;
+  color: #555;
+}
+
+.input-box {
+  display: flex;
+  border-top: 1px solid #ccc;
+  padding: 10px;
+}
+
+.input-box input {
+  flex: 1;
+  padding: 8px;
+  font-size: 14px;
+}
+
+.input-box button {
+  padding: 8px 12px;
+  margin-left: 5px;
+}
+
+.voice-tab {
+  padding: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.participant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.participant {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #eef;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.speaking-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: green;
+  animation: pulse 1s infinite alternate;
+  margin-left: 8px;
+}
+
+@keyframes pulse {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
+}
