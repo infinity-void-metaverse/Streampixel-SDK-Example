@@ -48,12 +48,27 @@ console.log("LIST:",list);
     }
   };
 
+
+  const muteAllRemote=async()=> {
+     sdk.muteAllRemote();
+     }
+
+  const unmuteAllRemote=()=> {
+   sdk.unmuteAllRemote();
+  }
+
+  const muteSelected= async(identity)=> {
+  sdk.muteSelected(identity);
+  }
+
+  const unmuteSelected = async(identity)=> {
+  sdk.unmuteSelected(identity);
+  }
+
   const toggleMic = (participantId) => {
     if (participantId === 'You' || participantId === userName) {
       sdk.toggleMic();
-    } else {
-      // Optional: implement admin control to mute remote
-    }
+    } 
   };
 
   const scrollToBottom = () => {
@@ -99,6 +114,10 @@ console.log("LIST:",list);
 
       {tab === 'voice' && (
         <div className="voice-tab">
+
+                <button onClick={() => muteAllRemote()}> Mute All</button>
+                <button onClick={() => unmuteAllRemote()}> UnMute All</button>
+
           <div className="participant-list">
             {participants.localParticipant && (
               <div className="participant">
@@ -110,7 +129,10 @@ console.log("LIST:",list);
             {participants.remoteParticipants.map((p, idx) => (
               <div key={idx} className="participant">
                 <span className="name">{p}</span>
-                <button onClick={() => toggleMic(p)}>🎤 Toggle Mic</button>
+
+                <button onClick={() => muteSelected(p)}> Mute</button>
+                <button onClick={() => unmuteSelected(p)}> UnMute</button>
+
                 <div className="speaking-indicator" />
               </div>
             ))}
