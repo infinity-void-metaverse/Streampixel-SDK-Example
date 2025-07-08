@@ -1,21 +1,24 @@
 import React, { useEffect, useState, useRef } from 'react';
 import './VoiceChatUI.css';
-import { StreamPixelVoiceChat } from 'streampixelsdk'; // Adjust path if needed
+import { StreamPixelVoiceChat } from 'streampixelsdk';
+import EmojiPicker from 'emoji-picker-react';
+import { FaMicrophone, FaMicrophoneSlash } from 'react-icons/fa';
+import { FaSmile, FaPaperPlane} from 'react-icons/fa';
 
 
-export default function VoiceChatUI({ roomName, userName,voiceChat }) {
+export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) {
   const [sdk, setSdk] = useState(null);
   const [tab, setTab] = useState('text');
   const [messages, setMessages] = useState([]);
   const [participants, setParticipants] = useState({ localParticipant: '', remoteParticipants: [] });
   const [input, setInput] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [mutedParticipants, setMutedParticipants] = useState({});
+
   const scrollRef = useRef();
 
-
   useEffect(() => {
-
-    console.log("USERNAME:",userName);
-    const chatSdk = new StreamPixelVoiceChat(roomName, userName ,voiceChat);
+    const chatSdk = new StreamPixelVoiceChat(roomName, userName, voiceChat);
     setSdk(chatSdk);
 
     const setup = async () => {
@@ -26,9 +29,12 @@ export default function VoiceChatUI({ roomName, userName,voiceChat }) {
       });
 
       chatSdk.onParticipantUpdate((list) => {
-
-console.log("LIST:",list);
         setParticipants(list);
+        const muteMap = {};
+        list.remoteParticipants.forEach(p => {
+          muteMap[p] = false; // default to unmuted
+        });
+        setMutedParticipants(muteMap);
       });
 
       await chatSdk.join();
@@ -48,27 +54,38 @@ console.log("LIST:",list);
     }
   };
 
+  const muteAllRemote = async () => {
+    sdk.muteAllRemote();
+    const updated = {};
+    participants.remoteParticipants.forEach(p => {
+      updated[p] = true;
+    });
+    setMutedParticipants(updated);
+  };
 
-  const muteAllRemote=async()=> {
-     sdk.muteAllRemote();
-     }
+  const unmuteAllRemote = () => {
+    sdk.unmuteAllRemote();
+    const updated = {};
+    participants.remoteParticipants.forEach(p => {
+      updated[p] = false;
+    });
+    setMutedParticipants(updated);
+  };
 
-  const unmuteAllRemote=()=> {
-   sdk.unmuteAllRemote();
-  }
+  const muteSelected = async (identity) => {
+    sdk.muteSelected(identity);
+    setMutedParticipants(prev => ({ ...prev, [identity]: true }));
+  };
 
-  const muteSelected= async(identity)=> {
-  sdk.muteSelected(identity);
-  }
-
-  const unmuteSelected = async(identity)=> {
-  sdk.unmuteSelected(identity);
-  }
+  const unmuteSelected = async (identity) => {
+    sdk.unmuteSelected(identity);
+    setMutedParticipants(prev => ({ ...prev, [identity]: false }));
+  };
 
   const toggleMic = (participantId) => {
     if (participantId === 'You' || participantId === userName) {
       sdk.toggleMic();
-    } 
+    }
   };
 
   const scrollToBottom = () => {
@@ -76,11 +93,18 @@ console.log("LIST:",list);
       scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
   };
-    
 
-
+  const onEmojiClick = (emojiData) => {
+    setInput(prev => prev + emojiData.emoji);
+    setShowEmojiPicker(false);
+  };
 
   return (
+
+    <>
+
+
+ <div className={`chat-container-wrapper ${darkMode ? 'dark-mode' : ''}`}>
     <div className="chat-container">
       <div className="tab-buttons">
         <button onClick={() => setTab('voice')} className={tab === 'voice' ? 'active' : ''}>Voice</button>
@@ -93,46 +117,60 @@ console.log("LIST:",list);
             {messages.map((msg, index) => (
               <div key={index} className={`message-box ${msg.from === 'You' ? 'local' : 'remote'}`}>
                 <div className="message-text">{msg.text}</div>
-                <div className="timestamp">
-                  {msg.time.toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })}
+                <div className={`timestamp ${msg.from === 'You' ? 'right' : 'left'}`}>
+                  {msg.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </div>
               </div>
             ))}
             <div ref={scrollRef} />
           </div>
-          <div className="input-box">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && sendMessage()}
-              placeholder="Type a message"
-            />
-            <button onClick={sendMessage}>Send</button>
-          </div>
+
+          <div className="input-container">
+  {showEmojiPicker && <EmojiPicker onEmojiClick={onEmojiClick} />}
+  <div className="input-wrapper">
+    <button className="emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
+      <FaSmile />
+    </button>
+    <input
+      value={input}
+      onChange={(e) => setInput(e.target.value)}
+      onKeyDown={e => e.key === 'Enter' && sendMessage()}
+      placeholder="Type a message"
+    />
+    <button className="send-btn" onClick={sendMessage}>
+      <FaPaperPlane />
+    </button>
+  </div>
+</div>
         </div>
       )}
 
       {tab === 'voice' && (
         <div className="voice-tab">
-
-                <button onClick={() => muteAllRemote()}> Mute All</button>
-                <button onClick={() => unmuteAllRemote()}> UnMute All</button>
+          <div className="voice-controls">
+            <button onClick={muteAllRemote}>Mute All</button>
+            <button onClick={unmuteAllRemote}>Unmute All</button>
+          </div>
 
           <div className="participant-list">
             {participants.localParticipant && (
               <div className="participant">
                 <span className="name">{participants.localParticipant} (You)</span>
-                <button onClick={() => toggleMic(participants.localParticipant)}>🎤 Toggle Mic</button>
+                <button onClick={() => toggleMic(participants.localParticipant)}>
+                  <FaMicrophone />
+                </button>
                 <div className="speaking-indicator" />
               </div>
             )}
+
             {participants.remoteParticipants.map((p, idx) => (
               <div key={idx} className="participant">
                 <span className="name">{p}</span>
-
-                <button onClick={() => muteSelected(p)}> Mute</button>
-                <button onClick={() => unmuteSelected(p)}> UnMute</button>
-
+                <button onClick={() =>
+                  mutedParticipants[p] ? unmuteSelected(p) : muteSelected(p)
+                }>
+                  {mutedParticipants[p] ? <FaMicrophoneSlash /> : <FaMicrophone />}
+                </button>
                 <div className="speaking-indicator" />
               </div>
             ))}
@@ -140,5 +178,7 @@ console.log("LIST:",list);
         </div>
       )}
     </div>
+    </div>
+    </>
   );
 }

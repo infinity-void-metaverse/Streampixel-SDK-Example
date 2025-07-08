@@ -9,6 +9,7 @@ let UIControlApp;
 const App = () => {
 
   const videoRef = useRef(null);
+  const [darkMode, setDarkMode] = useState(false);
 
  
 
@@ -184,7 +185,7 @@ function getRandom4DigitNumber() {
     }}
   />
   */}
-  <VoiceChatUI roomName="TESTROOM" userName={newUserName} voiceChat={true}/>
+  <VoiceChatUI roomName="TESTROOM" userName={newUserName} voiceChat={true} darkMode={darkMode} />
 
   <div style={{
     position: "fixed",
@@ -195,6 +196,13 @@ function getRandom4DigitNumber() {
     flexDirection: "row",
     gap: "10px"
   }}>
+
+        
+    <button onClick={() => setDarkMode(!darkMode)}>
+      Toggle {darkMode ? 'Light' : 'Dark'} Mode
+    </button>
+
+  
     <button onClick={() => getStats()}>Stats</button>
     <button onClick={() => getResolutionOptions()}>Resolution Options</button>
 
