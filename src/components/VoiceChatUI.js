@@ -102,6 +102,8 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
     setShowEmojiPicker(false);
   };
 
+
+  console.log(participants);
   return (
 
     <>
@@ -158,28 +160,27 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
           <div className="participant-list">
             {participants.localParticipant && (
               <div className="participant">
-                <span className="name">{participants.localParticipant.identity} (You)</span>
-                <button onClick={() => toggleMic(participants.localParticipant.identity)}>
+                <span className="name">{participants.localParticipant} (You)</span>
+                <button onClick={() => toggleMic(participants.localParticipant)}>
                  {localMic ? <FaMicrophoneSlash />:<FaMicrophone/>}
                 </button>
 
-                {participants.localParticipant.isSpeaking && 
                 <div className="speaking-indicator" />
-                 }
+                 
               </div>
             )}
 
             {participants.remoteParticipants.map((p, idx) => (
               <div key={idx} className="participant">
-                <span className="name">{p.identity}</span>
+                <span className="name">{p}</span>
                 <button onClick={() =>
-                  mutedParticipants[p.identity] ? unmuteSelected(p) : muteSelected(p)
+                  mutedParticipants[p] ? unmuteSelected(p) : muteSelected(p)
                 }>
-                  {mutedParticipants[p.identity] ? <FaMicrophoneSlash /> : <FaMicrophone />}
+                  {mutedParticipants[p] ? <FaMicrophoneSlash /> : <FaMicrophone />}
                 </button>
-                {p.isSpeaking && 
+                
                 <div className="speaking-indicator" />
-                 }
+                
               </div>
             ))}
           </div>
