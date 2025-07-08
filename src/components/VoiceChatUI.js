@@ -39,7 +39,7 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
         setParticipants(list);
         const muteMap = {};
         list.remoteParticipants.forEach(p => {
-          muteMap[p] = false; 
+          muteMap[p.id] = false; 
         });
         setMutedParticipants(muteMap);
       });
