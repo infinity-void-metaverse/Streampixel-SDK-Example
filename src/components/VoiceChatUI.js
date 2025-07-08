@@ -14,6 +14,7 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
   const [input, setInput] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [mutedParticipants, setMutedParticipants] = useState({});
+  const [localMic,setLocalMic] = useState(voiceChat);
 
   const scrollRef = useRef();
 
@@ -24,6 +25,7 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
     const setup = async () => {
       chatSdk.onMessage((msg) => {
         const time = new Date();
+        console.log("MSG:",msg);
         setMessages(prev => [...prev, { ...msg, time }]);
         scrollToBottom();
       });
@@ -85,6 +87,7 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
   const toggleMic = (participantId) => {
     if (participantId === 'You' || participantId === userName) {
       sdk.toggleMic();
+      setLocalMic(!localMic);
     }
   };
 
@@ -118,7 +121,7 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
               <div key={index} className={`message-box ${msg.from === 'You' ? 'local' : 'remote'}`}>
                 <div className="message-text">{msg.text}</div>
                 <div className={`timestamp ${msg.from === 'You' ? 'right' : 'left'}`}>
-                  {msg.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  {msg.from}:{msg.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </div>
               </div>
             ))}
@@ -155,23 +158,28 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
           <div className="participant-list">
             {participants.localParticipant && (
               <div className="participant">
-                <span className="name">{participants.localParticipant} (You)</span>
-                <button onClick={() => toggleMic(participants.localParticipant)}>
-                  <FaMicrophone />
+                <span className="name">{participants.localParticipant.identity} (You)</span>
+                <button onClick={() => toggleMic(participants.localParticipant.identity)}>
+                 {localMic ? <FaMicrophoneSlash />:<FaMicrophone/>}
                 </button>
+
+                {participants.localParticipant.isSpeaking && 
                 <div className="speaking-indicator" />
+                 }
               </div>
             )}
 
             {participants.remoteParticipants.map((p, idx) => (
               <div key={idx} className="participant">
-                <span className="name">{p}</span>
+                <span className="name">{p.identity}</span>
                 <button onClick={() =>
-                  mutedParticipants[p] ? unmuteSelected(p) : muteSelected(p)
+                  mutedParticipants[p.identity] ? unmuteSelected(p) : muteSelected(p)
                 }>
-                  {mutedParticipants[p] ? <FaMicrophoneSlash /> : <FaMicrophone />}
+                  {mutedParticipants[p.identity] ? <FaMicrophoneSlash /> : <FaMicrophone />}
                 </button>
+                {p.isSpeaking && 
                 <div className="speaking-indicator" />
+                 }
               </div>
             ))}
           </div>
