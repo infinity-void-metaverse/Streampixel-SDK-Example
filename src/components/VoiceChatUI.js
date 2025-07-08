@@ -6,7 +6,7 @@ import { FaMicrophone, FaMicrophoneSlash } from 'react-icons/fa';
 import { FaSmile, FaPaperPlane} from 'react-icons/fa';
 
 
-export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) {
+export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,position,avatar }) {
   const [sdk, setSdk] = useState(null);
   const [tab, setTab] = useState('text');
   const [messages, setMessages] = useState([]);
@@ -16,10 +16,15 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
   const [mutedParticipants, setMutedParticipants] = useState({});
   const [localMic,setLocalMic] = useState(voiceChat);
 
+
+  const positionStyle =
+    position === "Left"?{position:"fixed",left:"20px",bottom:"20px"}:{position:"fixed",right:"20px",bottom:"20px"}
+  
+
   const scrollRef = useRef();
 
   useEffect(() => {
-    const chatSdk = new StreamPixelVoiceChat(roomName, userName, voiceChat);
+    const chatSdk = new StreamPixelVoiceChat(roomName, userName, voiceChat,avatar);
     setSdk(chatSdk);
 
     const setup = async () => {
@@ -34,7 +39,7 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
         setParticipants(list);
         const muteMap = {};
         list.remoteParticipants.forEach(p => {
-          muteMap[p] = false; // default to unmuted
+          muteMap[p] = false; 
         });
         setMutedParticipants(muteMap);
       });
@@ -60,7 +65,7 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
     sdk.muteAllRemote();
     const updated = {};
     participants.remoteParticipants.forEach(p => {
-      updated[p] = true;
+      updated[p.id] = true;
     });
     setMutedParticipants(updated);
   };
@@ -69,23 +74,26 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
     sdk.unmuteAllRemote();
     const updated = {};
     participants.remoteParticipants.forEach(p => {
-      updated[p] = false;
+      updated[p.id] = false;
     });
     setMutedParticipants(updated);
   };
 
   const muteSelected = async (identity) => {
+
     sdk.muteSelected(identity);
     setMutedParticipants(prev => ({ ...prev, [identity]: true }));
   };
 
   const unmuteSelected = async (identity) => {
+
     sdk.unmuteSelected(identity);
     setMutedParticipants(prev => ({ ...prev, [identity]: false }));
   };
 
   const toggleMic = (participantId) => {
-    if (participantId === 'You' || participantId === userName) {
+
+    if (participantId == userName) {
       sdk.toggleMic();
       setLocalMic(!localMic);
     }
@@ -103,13 +111,12 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
   };
 
 
-  console.log(participants);
   return (
 
     <>
 
 
- <div className={`chat-container-wrapper ${darkMode ? 'dark-mode' : ''}`}>
+ <div className={`chat-container-wrapper ${darkMode ? 'dark-mode' : ''}`} style={positionStyle}>
     <div className="chat-container">
       <div className="tab-buttons">
         <button onClick={() => setTab('voice')} className={tab === 'voice' ? 'active' : ''}>Voice</button>
@@ -121,7 +128,14 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
           <div className="messages">
             {messages.map((msg, index) => (
               <div key={index} className={`message-box ${msg.from === 'You' ? 'local' : 'remote'}`}>
-                <div className="message-text">{msg.text}</div>
+               
+                <div className="message-text">
+                  {/*
+                   <div class="avatar">
+                <img src= {`data:image/svg+xml;utf8,${encodeURIComponent(avatar)}`} />
+                </div>
+                  */}
+                  {msg.text}</div>
                 <div className={`timestamp ${msg.from === 'You' ? 'right' : 'left'}`}>
                   {msg.from}:{msg.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </div>
@@ -160,8 +174,8 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
           <div className="participant-list">
             {participants.localParticipant && (
               <div className="participant">
-                <span className="name">{participants.localParticipant} (You)</span>
-                <button onClick={() => toggleMic(participants.localParticipant)}>
+                <span className="name">{participants.localParticipant.id} (You)</span>
+                <button onClick={() => toggleMic(participants.localParticipant.id)}>
                  {localMic ? <FaMicrophoneSlash />:<FaMicrophone/>}
                 </button>
 
@@ -172,11 +186,11 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode }) 
 
             {participants.remoteParticipants.map((p, idx) => (
               <div key={idx} className="participant">
-                <span className="name">{p}</span>
+                <span className="name">{p.id}</span>
                 <button onClick={() =>
-                  mutedParticipants[p] ? unmuteSelected(p) : muteSelected(p)
+                  mutedParticipants[p.id] ? unmuteSelected(p.id) : muteSelected(p.id)
                 }>
-                  {mutedParticipants[p] ? <FaMicrophoneSlash /> : <FaMicrophone />}
+                  {mutedParticipants[p.id] ? <FaMicrophoneSlash /> : <FaMicrophone />}
                 </button>
                 
                 <div className="speaking-indicator" />

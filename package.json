@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@dicebear/collection": "^9.2.3",
+    "@dicebear/core": "^9.2.3",
     "browserify-zlib": "^0.2.0",
     "crypto-browserify": "^3.12.1",
     "emoji-picker-react": "^4.12.3",
     "https-browserify": "^1.0.0",
+    "nameforgejs": "^1.4.1",
     "os-browserify": "^0.3.0",
     "path-browserify": "^1.0.1",
     "react": "^18.3.1",

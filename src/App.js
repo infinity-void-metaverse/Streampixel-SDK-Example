@@ -1,10 +1,14 @@
 import React, { useEffect, useRef,useState } from 'react';
 import {StreamPixelApplication} from 'streampixelsdk';
 import VoiceChatUI from './components/VoiceChatUI';
+import {NameForgeJS} from 'nameforgejs';
+import { createAvatar } from '@dicebear/core';
+import { personas } from '@dicebear/collection';
 
 let PixelStreamingApp;
 let PixelStreamingUiApp;
 let UIControlApp;
+const nameGenerator = new NameForgeJS();
 
 const App = () => {
 
@@ -151,9 +155,18 @@ const App = () => {
     }
 
 
-function getRandom4DigitNumber() {
-    return Math.floor(Math.random() * 9000) + 1000;
-}
+const userName = nameGenerator.generateNames({
+  name_type: 'human',
+  count: 1,
+  generate_last_name: false,
+  country: 'any'
+});
+
+
+const avatar = createAvatar(personas, {
+  seed: userName,
+  size: 32,
+}).toString();
 
 
   const handleMicrophone =async()=>{
@@ -167,15 +180,13 @@ function getRandom4DigitNumber() {
 
     }
   
-    
-      const newUserName = "yuvraj"+getRandom4DigitNumber();
-    
+        
 
   return (
     
 <div className='containMain'>
   
-  {/*<div
+<div
     id="videoElement"
     ref={videoRef}
     style={{
@@ -184,8 +195,8 @@ function getRandom4DigitNumber() {
       position: "relative"
     }}
   />
-  */}
-  <VoiceChatUI roomName="TESTROOM" userName={newUserName} voiceChat={true} darkMode={darkMode} />
+  
+  <VoiceChatUI roomName="TESTROOM" userName={userName} voiceChat={true} darkMode={darkMode}  position="Left" avatar={avatar}/>
 
   <div style={{
     position: "fixed",
