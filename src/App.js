@@ -98,7 +98,7 @@ const App = () => {
   };
 
   useEffect(()=>{
-   // startPlay();
+    startPlay();
   },[])
 
 
