@@ -24,7 +24,6 @@
   --shadow-color: rgba(255, 255, 255, 0.05);
 }
 
-
 .chat-container {
   width: 400px;
   height: 400px;
@@ -47,16 +46,26 @@
 
 .tab-buttons button {
   margin: 0 5px;
-  padding: 10px;
+  padding: 10px 18px;
   border: none;
+  border-radius: 25px;
   background-color: var(--tab-inactive);
   color: var(--text-color);
   cursor: pointer;
+  font-weight: 600;
+  transition: background-color 0.3s, color 0.3s;
+  box-shadow: 0 2px 5px var(--shadow-color);
+}
+
+.tab-buttons button:hover:not(.active) {
+  background-color: var(--tab-active);
+  color: #fff;
 }
 
 .tab-buttons .active {
   background-color: var(--tab-active);
   color: #fff;
+  box-shadow: 0 4px 12px var(--tab-active);
 }
 
 .text-tab,
@@ -76,33 +85,81 @@
   padding: 10px;
   display: flex;
   flex-direction: column;
+  gap: 6px;
 }
 
 .message-box {
-  padding: 10px;
-  margin: 5px 0;
-  border-radius: 8px;
-  max-width: 60%;
+  padding: 14px 18px;
+  margin: 6px 0;
+  border-radius: 18px;
+  max-width: 70%;
   word-wrap: break-word;
   position: relative;
+  font-size: 15px;
+  line-height: 1.4;
+  box-shadow: 0 1px 5px var(--shadow-color);
+  transition: background-color 0.3s;
+  display: flex;
+  align-items: flex-start;
 }
 
 .message-box.local {
   background-color: var(--message-local);
-  align-self: flex-start;
+  align-self: flex-end;
   text-align: left;
+  border-bottom-right-radius: 4px;
+  border-bottom-left-radius: 18px;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  color: var(--text-color);
 }
 
 .message-box.remote {
   background-color: var(--message-remote);
-  align-self: flex-end;
-  text-align: right;
+  align-self: flex-start;
+  text-align: left;
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 18px;
+  border-top-right-radius: 18px;
+  border-top-left-radius: 18px;
+  color: var(--text-color);
 }
 
+/* Avatar inside message */
+.message-box .avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-right: 12px;
+  flex-shrink: 0;
+  background-color: #eee;
+}
+
+/* Make sure the inner img or svg fills avatar container */
+.message-box .avatar img,
+.message-box .avatar .img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Message text */
+.message-text {
+  flex: 1;
+  color: var(--text-color);
+  word-wrap: break-word;
+}
+
+/* Timestamp */
 .timestamp {
-  font-size: 0.75rem;
-  opacity: 0.6;
+  font-size: 0.7rem;
+  opacity: 0.5;
   margin-top: 4px;
+  font-style: italic;
+  color: var(--text-color);
+  align-self: flex-end;
 }
 
 .timestamp.left {
@@ -142,13 +199,25 @@
 
 .input-wrapper .emoji-btn,
 .input-wrapper .send-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 18px;
+  background-color: var(--tab-inactive);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  font-size: 20px;
   color: var(--text-color);
   display: flex;
+  justify-content: center;
   align-items: center;
+  transition: background-color 0.3s, color 0.3s;
+  border: none;
+  cursor: pointer;
+}
+
+.input-wrapper .emoji-btn:hover,
+.input-wrapper .send-btn:hover {
+  background-color: var(--tab-active);
+  color: #fff;
+  box-shadow: 0 4px 10px var(--tab-active);
 }
 
 .voice-controls {
@@ -157,6 +226,25 @@
   gap: 10px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border-color);
+}
+
+.voice-controls button {
+  flex: 1;
+  padding: 10px 0;
+  border-radius: 25px;
+  border: none;
+  background-color: var(--tab-inactive);
+  color: var(--text-color);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s, color 0.3s;
+  box-shadow: 0 2px 6px var(--shadow-color);
+}
+
+.voice-controls button:hover {
+  background-color: var(--tab-active);
+  color: #fff;
+  box-shadow: 0 4px 14px var(--tab-active);
 }
 
 .participant-list {
@@ -181,14 +269,30 @@
 .participant .name {
   font-weight: 500;
   flex: 1;
+  padding-left: 12px;
+  color: var(--text-color);
 }
 
 .participant button {
-  background: none;
-  border: none;
+  background-color: var(--tab-inactive);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
   font-size: 18px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   cursor: pointer;
   color: var(--text-color);
+  border: none;
+  transition: background-color 0.3s, color 0.3s;
+  box-shadow: 0 1px 4px var(--shadow-color);
+}
+
+.participant button:hover {
+  background-color: var(--tab-active);
+  color: #fff;
+  box-shadow: 0 3px 8px var(--tab-active);
 }
 
 .speaking-indicator {
@@ -198,7 +302,6 @@
   border-radius: 50%;
   margin-left: 10px;
 }
-
 
 .messages::-webkit-scrollbar,
 .participant-list::-webkit-scrollbar {
@@ -229,17 +332,17 @@
 }
 
 .avatar {
-  width: 32px;            
+  width: 32px;
   height: 32px;
   border-radius: 50%;
   overflow: hidden;
   display: inline-block;
-  background-color: #eee; 
+  background-color: #eee;
 }
 
 .avatar img {
   width: 100%;
   height: 100%;
-  object-fit: cover;       
+  object-fit: cover;
   display: block;
 }
