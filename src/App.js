@@ -179,7 +179,7 @@ const avatar = createAvatar(personas, {
         }
 
     }
-  
+
         
 
   return (

@@ -15,10 +15,11 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [mutedParticipants, setMutedParticipants] = useState({});
   const [localMic,setLocalMic] = useState(voiceChat);
+  const inputRef = useRef(null);
 
 
   const positionStyle =
-    position === "Left"?{position:"fixed",left:"20px",bottom:"20px"}:{position:"fixed",right:"20px",bottom:"20px"}
+    position === "Left"?{position:"fixed",left:"20px",bottom:"30px",zIndex:"100"}:{position:"fixed",right:"20px",bottom:"30px",zIndex:"100"}
   
 
   const scrollRef = useRef();
@@ -53,10 +54,23 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
     };
   }, [roomName, userName]);
 
+
+    useEffect(() => {
+    if (input.trim() === '' && document.activeElement === inputRef.current) {
+      inputRef.current.blur();
+      console.log('Input is empty, focus removed');
+    }
+  }, [input]);
+
   const sendMessage = () => {
     if (input.trim()) {
       sdk.sendMessage(input.trim());
       setInput('');
+      inputRef.current.blur();
+
+      const videoElement =  document.getElementById('videoElement');
+
+      videoElement.focus();
     }
   };
 
@@ -157,6 +171,7 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
       <FaSmile />
     </button>
     <input
+      ref={inputRef}
       value={input}
       onChange={(e) => setInput(e.target.value)}
       onKeyDown={e => e.key === 'Enter' && sendMessage()}
