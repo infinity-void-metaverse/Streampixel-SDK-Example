@@ -110,6 +110,8 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
     setShowEmojiPicker(false);
   };
 
+  console.log(participants);
+
 
   return (
 
@@ -130,11 +132,17 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
               <div key={index} className={`message-box ${msg.from === 'You' ? 'local' : 'remote'}`}>
                
                 <div className="message-text">
-                  {/*
-                   <div class="avatar">
-                <img src= {`data:image/svg+xml;utf8,${encodeURIComponent(avatar)}`} />
-                </div>
-                  */}
+                  
+                  
+                     <div className='avatar'>
+                                  <div
+  className="avatar img"
+  dangerouslySetInnerHTML={{
+    __html: `${msg.avatar}`
+  }}
+/>
+</div>
+                  
                   {msg.text}</div>
                 <div className={`timestamp ${msg.from === 'You' ? 'right' : 'left'}`}>
                   {msg.from}:{msg.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -174,18 +182,37 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
           <div className="participant-list">
             {participants.localParticipant && (
               <div className="participant">
+                 <div className='avatar'>
+                                  <div
+  className="avatar img"
+  dangerouslySetInnerHTML={{
+    __html: `${participants.localParticipant.avatar}`
+  }}
+/>
+</div>
+
                 <span className="name">{participants.localParticipant.id} (You)</span>
                 <button onClick={() => toggleMic(participants.localParticipant.id)}>
                  {localMic ? <FaMicrophoneSlash />:<FaMicrophone/>}
                 </button>
-
-                <div className="speaking-indicator" />
+                {participants.localParticipant.speaking && (
+                <div className="speaking-indicator" />)}
                  
               </div>
             )}
 
             {participants.remoteParticipants.map((p, idx) => (
               <div key={idx} className="participant">
+
+<div className='avatar'>
+                                  <div
+  className="avatar img"
+  dangerouslySetInnerHTML={{
+    __html: `${p.avatar}`
+  }}
+/>
+</div>
+
                 <span className="name">{p.id}</span>
                 <button onClick={() =>
                   mutedParticipants[p.id] ? unmuteSelected(p.id) : muteSelected(p.id)
@@ -193,7 +220,8 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
                   {mutedParticipants[p.id] ? <FaMicrophoneSlash /> : <FaMicrophone />}
                 </button>
                 
-                <div className="speaking-indicator" />
+                    {p.speaking && (
+                <div className="speaking-indicator" />)}
                 
               </div>
             ))}
