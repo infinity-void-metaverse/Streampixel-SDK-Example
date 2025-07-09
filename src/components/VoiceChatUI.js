@@ -30,7 +30,6 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
     const setup = async () => {
       chatSdk.onMessage((msg) => {
         const time = new Date();
-        console.log("MSG:",msg);
         setMessages(prev => [...prev, { ...msg, time }]);
         scrollToBottom();
       });
@@ -110,7 +109,6 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
     setShowEmojiPicker(false);
   };
 
-  console.log(participants);
 
 
   return (
