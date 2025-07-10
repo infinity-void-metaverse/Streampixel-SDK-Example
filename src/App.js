@@ -14,7 +14,15 @@ const App = () => {
 
   const videoRef = useRef(null);
   const [darkMode, setDarkMode] = useState(false);
+  const [showAudioGroup, setShowAudioGroup] = useState(false);
 
+  const openAudioGroup = () => {
+    setShowAudioGroup(true);
+  };
+
+  const closeAudioGroup = () => {
+    setShowAudioGroup(false);
+  };
  
 
   const startPlay = async () => {
@@ -98,7 +106,7 @@ const App = () => {
   };
 
   useEffect(()=>{
-    startPlay();
+    //startPlay();
   },[])
 
 
@@ -196,7 +204,7 @@ const avatar = createAvatar(personas, {
     }}
   />
   
-  <VoiceChatUI roomName="TESTROOM" userName={userName} voiceChat={true} darkMode={darkMode}  position="Left" avatar={avatar}/>
+  <VoiceChatUI roomName="TESTROOM" userName={userName} voiceChat={true} darkMode={darkMode}  position="Left" avatar={avatar} showAudioGroup={showAudioGroup} onClose={closeAudioGroup}/>
 
   <div style={{
     position: "fixed",
@@ -212,7 +220,11 @@ const avatar = createAvatar(personas, {
     <button onClick={() => setDarkMode(!darkMode)}>
       Toggle {darkMode ? 'Light' : 'Dark'} Mode
     </button>
-
+     <button
+        onClick={openAudioGroup}
+         >
+       Show Audio Group
+      </button>
   
     <button onClick={() => getStats()}>Stats</button>
     <button onClick={() => getResolutionOptions()}>Resolution Options</button>

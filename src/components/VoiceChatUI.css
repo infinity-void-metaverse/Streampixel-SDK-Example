@@ -30,11 +30,13 @@
   margin: 40px auto;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+ 
+
   overflow: hidden;
-  background: var(--bg-color);
+  /*background: var(--bg-color);
   box-shadow: 0 2px 8px var(--shadow-color);
+   border: 1px solid var(--border-color);
+     border-radius: 8px;*/
   color: var(--text-color);
 }
 
@@ -172,8 +174,10 @@
 
 .input-container {
   padding: 10px;
+ /* 
   border-top: 1px solid var(--border-color);
   background: var(--box-color);
+  */
 }
 
 .input-wrapper {
@@ -221,79 +225,30 @@
 }
 
 .voice-controls {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
+ text-align: center;
   padding-bottom: 10px;
+   padding-top: 10px;
   border-bottom: 1px solid var(--border-color);
 }
 
 .voice-controls button {
   flex: 1;
-  padding: 10px 0;
+  padding: 12px;
   border-radius: 25px;
   border: none;
+  width: 150px;
   background-color: var(--tab-inactive);
   color: var(--text-color);
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.3s, color 0.3s;
-  box-shadow: 0 2px 6px var(--shadow-color);
 }
 
 .voice-controls button:hover {
   background-color: var(--tab-active);
   color: #fff;
-  box-shadow: 0 4px 14px var(--tab-active);
 }
 
-.participant-list {
-  flex: 1;
-  overflow-y: auto;
-  padding-top: 10px;
-  padding-right: 5px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.participant {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background-color: var(--participant-bg);
-  padding: 10px 15px;
-  border-radius: 8px;
-}
-
-.participant .name {
-  font-weight: 500;
-  flex: 1;
-  padding-left: 12px;
-  color: var(--text-color);
-}
-
-.participant button {
-  background-color: var(--tab-inactive);
-  border-radius: 50%;
-  width: 36px;
-  height: 36px;
-  font-size: 18px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  color: var(--text-color);
-  border: none;
-  transition: background-color 0.3s, color 0.3s;
-  box-shadow: 0 1px 4px var(--shadow-color);
-}
-
-.participant button:hover {
-  background-color: var(--tab-active);
-  color: #fff;
-  box-shadow: 0 3px 8px var(--tab-active);
-}
 
 .speaking-indicator {
   width: 10px;
@@ -305,7 +260,7 @@
 
 .messages::-webkit-scrollbar,
 .participant-list::-webkit-scrollbar {
-  width: 6px;
+  width: 0px; 
 }
 
 .messages::-webkit-scrollbar-track,
@@ -322,15 +277,14 @@
 
 .messages,
 .participant-list {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) var(--bg-color);
+  scrollbar-width: none; 
+  /* scrollbar-color: var(--border-color) var(--bg-color); */
 }
 
 .messages::-webkit-scrollbar-thumb:hover,
 .participant-list::-webkit-scrollbar-thumb:hover {
   background-color: var(--tab-active);
 }
-
 .avatar {
   width: 32px;
   height: 32px;
@@ -345,4 +299,34 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.participant-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+  padding: 10px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.participant {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px;
+  background-color: var(--participant-bg);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px var(--shadow-color);
+}
+
+.participant .name {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--text-color);
+}
+
+.participant button {
+  margin-top: 8px;
 }
