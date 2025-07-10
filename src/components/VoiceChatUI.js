@@ -68,6 +68,20 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
     }
   }, [input]);
 
+    useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (document.activeElement === inputRef.current &&  e.key !== 'Enter') {
+       e.stopPropagation();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true); 
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, []);
+
   const sendMessage = () => {
     if (input.trim()) {
       sdk.sendMessage(input.trim());
@@ -142,27 +156,30 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
         <div className="text-tab">
           
           <div className="messages" >
-            <div style={showMessageBox?{display:'block'}:{display:"none"}}>
+            <div style={showMessageBox?{display:"contents"}:{display:"none"}}>
             {messages.map((msg, index) => (
-              <div key={index} className={`message-box ${msg.from === 'You' ? 'local' : 'remote'}`}>
-               
-                <div className="message-text">
-                  
-                  
-                     <div className='avatar'>
-                                  <div
-  className="avatar img"
-  dangerouslySetInnerHTML={{
-    __html: `${msg.avatar}`
-  }}
-/>
+        
+      <div key={index} className={`message-wrapper ${msg.from === 'You' ? 'right' : 'left'}`}>
+  <div className="sender-name">{msg.from}</div>
+
+  <div className={`message-box ${msg.from === 'You' ? 'local' : 'remote'}`}>
+    <div className="avatar">
+      <div
+        className="avatar img"
+        dangerouslySetInnerHTML={{ __html: `${msg.avatar}` }}
+      />
+    </div>
+
+    <div className="message-content">
+      <div className="message-text">{msg.text}</div>
+      <div className="timestamp">
+        {msg.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+      </div>
+    </div>
+  </div>
 </div>
-                  
-                  {msg.text}</div>
-                <div className={`timestamp ${msg.from === 'You' ? 'right' : 'left'}`}>
-                  {msg.from}:{msg.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                </div>
-              </div>
+
+
             ))}
             <div ref={scrollRef} />
           </div>     </div>

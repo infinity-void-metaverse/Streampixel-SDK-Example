@@ -8,7 +8,26 @@ import { personas } from '@dicebear/collection';
 let PixelStreamingApp;
 let PixelStreamingUiApp;
 let UIControlApp;
-const nameGenerator = new NameForgeJS();
+
+function generateRandomName() {
+  const nouns = [
+    "Neon", "Silent", "Ghostly", "Turbo", "Infinite", "Crimson", "Phantom", "Electric", "Quantum", "Radiant",
+    "Glitchy", "Shiny", "Hidden", "Frozen", "Vivid", "Shadow", "Velvet", "Chrome", "Virtual", "Floating"
+  ];
+
+  const adjectives = [
+    "Pixel", "Architect", "Streamer", "Prism", "Sprite", "Phantom", "Composer", "Painter", "Shader",
+    "Operator", "Lancer", "Visionary", "Cycler", "Mirage", "Voxel", "Sculptor", "Animator", "Seeker", "Renderer", "Engineer"
+  ];
+
+  const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
+  const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const randomId = Math.floor(1000 + Math.random() * 9000); 
+
+  return `Anonymous${randomNoun}${randomAdjective}${randomId}`;
+}
+
+//const nameGenerator = new NameForgeJS();
 
 const App = () => {
 
@@ -106,7 +125,7 @@ const App = () => {
   };
 
   useEffect(()=>{
-    //startPlay();
+    startPlay();
   },[])
 
 
@@ -163,12 +182,7 @@ const App = () => {
     }
 
 
-const userName = nameGenerator.generateNames({
-  name_type: 'human',
-  count: 1,
-  generate_last_name: false,
-  country: 'any'
-});
+const userName = generateRandomName();
 
 
 const avatar = createAvatar(personas, {
