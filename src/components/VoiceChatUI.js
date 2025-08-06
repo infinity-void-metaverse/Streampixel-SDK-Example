@@ -2,38 +2,69 @@ import React, { useEffect, useState, useRef } from 'react';
 import './VoiceChatUI.css';
 import { StreamPixelVoiceChat } from 'streampixelsdk';
 import EmojiPicker from 'emoji-picker-react';
-import { FaMicrophone, FaMicrophoneSlash } from 'react-icons/fa';
-import { FaSmile, FaPaperPlane,FaWindowClose } from 'react-icons/fa';
-import { FaRegMessage } from "react-icons/fa6";
+import {  FaPaperPlane,FaWindowClose } from 'react-icons/fa';
+import { Modal ,Card,Row,Col,Badge } from 'react-bootstrap';
+//import { isMobile,isTablet } from 'react-device-detect';
+import { BsArrowsExpand,BsArrowsCollapse,BsMicFill,BsMicMuteFill} from "react-icons/bs";
 
 
-export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,position,avatar,showAudioGroup, onClose, children }) {
+
+
+
+
+function isMobilePhone() {
+  const ua = navigator.userAgent || navigator.vendor || window.opera;
+  return /android|iphone|blackberry|iemobile|opera mini/i.test(ua)
+    && !/ipad|ipod/i.test(ua);
+}
+
+let isMobile = isMobilePhone();
+
+export default function VoiceChatUI({ roomName,micStart,roomConnect,roomDisconnect,toggleMicChat,handleRoomConnect,handleMessageNumber, userName, voiceChat,textChat,darkMode,position,avatar,showAudioGroup, showChatUiMobile, onClose,onCloseChatUi  }) {
+
+
+
   const [sdk, setSdk] = useState(null);
-  const [tab, setTab] = useState('text');
   const [messages, setMessages] = useState([]);
   const [participants, setParticipants] = useState({ localParticipant: '', remoteParticipants: [] });
   const [input, setInput] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMessageBox, setShowMessageBox] = useState(false);
-  const [showVoicePopup, setShowVoicePopup] = useState(false);
   const [muteAll, setMuteAll] = useState(false);
-
+  const [localUserName, setLocalUserName] = useState();
+  const [newMessage, setNewMessage] = useState(0);
+  const [previousMessageLength,setPreviousMessageLength] = useState(0);
 
   const [mutedParticipants, setMutedParticipants] = useState({});
-  const [localMic,setLocalMic] = useState(voiceChat);
+  const [localMic,setLocalMic] = useState(micStart);
   const inputRef = useRef(null);
 
 
-  const positionStyle =
-    position === "Left"?{position:"fixed",left:"20px",bottom:"12px",zIndex:"100"}:{position:"fixed",right:"20px",bottom:"12px",zIndex:"100"}
-  
+
+
+const styleChatBox = isMobile
+  ? {
+      position: "absolute",
+      zIndex: 1,
+    
+    }
+  : {
+      
+    };
 
   const scrollRef = useRef();
 
-  useEffect(() => {
-    const chatSdk = new StreamPixelVoiceChat(roomName, userName, voiceChat,avatar);
-    setSdk(chatSdk);
 
+  useEffect(() => {
+
+    if(sdk == null && roomConnect == true){
+
+
+    const chatSdk = new StreamPixelVoiceChat(roomName, userName, voiceChat,avatar,micStart);
+    setSdk(chatSdk);
+    setLocalUserName(userName);
+
+console.log("USERNAME:",userName);
     const setup = async () => {
       chatSdk.onMessage((msg) => {
         const time = new Date();
@@ -41,30 +72,41 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
         scrollToBottom();
       });
 
-      chatSdk.onParticipantUpdate((list) => {
-        setParticipants(list);
+
+
+    chatSdk.onParticipantUpdate((list) => {
+    setParticipants(list);
+
+    if (muteAll) {
         const muteMap = {};
         list.remoteParticipants.forEach(p => {
-          muteMap[p.id] = false; 
+            muteMap[p.id] = true;  
         });
         setMutedParticipants(muteMap);
-      });
+    }
+
+    });
 
       await chatSdk.join();
+
+      handleRoomConnect(true);
+
     };
 
     setup();
-
+  }
     return () => {
-      chatSdk.leave();
+    
     };
   }, [roomName, userName]);
 
 
+
+
+  
     useEffect(() => {
     if (input.trim() === '' && document.activeElement === inputRef.current) {
       inputRef.current.blur();
-      console.log('Input is empty, focus removed');
     }
   }, [input]);
 
@@ -84,7 +126,8 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
 
   const sendMessage = () => {
     if (input.trim()) {
-      sdk.sendMessage(input.trim());
+      sdk && sdk.sendMessage(input.trim());
+      setShowMessageBox(true);
       setInput('');
       inputRef.current.blur();
 
@@ -93,6 +136,36 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
       videoElement.focus();
     }
   };
+
+
+
+useEffect(() => {
+  const disconnectRoom = async () => {
+
+    if (roomDisconnect) {
+
+      try {
+        await sdk.leave();
+       setSdk(null);
+      } catch (error) {
+        console.error("Error:", error);
+      }
+    }
+  };
+
+  disconnectRoom();
+}, [roomDisconnect]);
+
+
+
+useEffect(() => {
+
+  if(sdk !== null){
+      toggleMic(participants.localParticipant.id)
+  }
+}, [toggleMicChat]);
+    
+
 
   const muteAllRemote = async () => {
     sdk.muteAllRemote();
@@ -127,8 +200,7 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
   };
 
   const toggleMic = (participantId) => {
-
-    if (participantId == userName) {
+    if (participantId == localUserName) {
       sdk.toggleMic();
       setLocalMic(!localMic);
     }
@@ -145,35 +217,109 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
     setShowEmojiPicker(false);
   };
 
+const chunkArray = (array, size) => {
+  const chunkedArr = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunkedArr.push(array.slice(i, i + size));
+  }
+  return chunkedArr;
+};
+
+
+useEffect(() => {
+  if (scrollRef.current) {
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }
+
+  const lastMessage = messages[messages.length-1];
+
+  if(lastMessage&&lastMessage.from !== "You" && messages.length > previousMessageLength){
+
+
+    setPreviousMessageLength(messages.length);
+
+  if(showMessageBox  === false && !isMobile){
+    setNewMessage(newMessage+1);
+    handleMessageNumber(newMessage+1);
+  }
+  if(showChatUiMobile  === false && isMobile){
+     setNewMessage(newMessage+1);
+     handleMessageNumber(newMessage+1);
+  }
+
+
+}
+
+    if(showMessageBox  === true && !isMobile){
+    setNewMessage(0);
+    handleMessageNumber(0);
+  }
+  
+
+    if(showChatUiMobile  === true && isMobile){
+     setNewMessage(0);
+     handleMessageNumber(0);
+
+}
+
+
+ }, [messages,showMessageBox,showChatUiMobile]);
 
 
   return (
 
     <>
- <div className={`chat-container-wrapper ${darkMode ? 'dark-mode' : ''}`} style={positionStyle}>
-    <div className="chat-container">
+
+
+
+
+    {textChat && showChatUiMobile &&(
+<div
+  className={`chat-container-wrapper ${darkMode ? 'dark-mode' : ''} ${
+    !isMobile ? (position === 'Left' ? 'Left' : 'Right') : ''
+  }`}
+>    <div className="chat-container" style={styleChatBox}>
       
+{isMobile &&(
+     <button
+      style={{
+        float: 'left',
+        background: 'transparent',
+        border: 'none',
+        fontSize: '14px',
+        zIndex:1,
+        cursor: 'pointer',
+        marginTop:"10px",
+        position:'absolute',
+        left:'12px',
+        color: darkMode ? '#fff' : '#333',
+      }}
+       onClick={onCloseChatUi}
+    >
+      <FaWindowClose  size={20}/>
+    </button>
+)}
+
         <div className="text-tab">
           
-          <div className="messages" >
-            <div style={showMessageBox?{display:"contents"}:{display:"none"}}>
-            {messages.map((msg, index) => (
+          <div  className={`${showMessageBox === true ? 'messages' : 'messagesHideBackground'}`}  ref={scrollRef} >
+            <div style={showMessageBox || isMobile?{display:"contents"}:{display:"none"}}>
+        {[...messages]
+  .sort((a, b) => new Date(b.time) - new Date(a.time))
+  .map((msg, index) => (
         
       <div key={index} className={`message-wrapper ${msg.from === 'You' ? 'right' : 'left'}`}>
-  <div className="sender-name">{msg.from}</div>
+  <div className={`sender-name ${msg.from === 'You' ? 'right' : 'left'}`}>{msg.from === 'You' ?'':msg.from }</div>
 
   <div className={`message-box ${msg.from === 'You' ? 'local' : 'remote'}`}>
-    <div className="avatar">
-      <div
-        className="avatar img"
-        dangerouslySetInnerHTML={{ __html: `${msg.avatar}` }}
-      />
-    </div>
+   
 
     <div className="message-content">
       <div className="message-text">{msg.text}</div>
       <div className="timestamp">
-        {msg.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+      
+           {new Date(msg.time).toLocaleTimeString(navigator.language, {hour: '2-digit', minute:'2-digit'})} 
+        
       </div>
     </div>
   </div>
@@ -181,16 +327,18 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
 
 
             ))}
-            <div ref={scrollRef} />
+        
           </div>     </div>
 
 
           <div className="input-container">
   {showEmojiPicker && <EmojiPicker onEmojiClick={onEmojiClick} />}
   <div className="input-wrapper">
+    {/*
     <button className="emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
       <FaSmile />
     </button>
+    */}
     <input
       ref={inputRef}
       value={input}
@@ -198,121 +346,244 @@ export default function VoiceChatUI({ roomName, userName, voiceChat,darkMode,pos
       onKeyDown={e => e.key === 'Enter' && sendMessage()}
       placeholder="Type a message"
     />
-    {/*
+
+    {isMobile && (
+
     <button className="send-btn" onClick={sendMessage}>
-      <FaPaperPlane />
+      <FaPaperPlane color='#fff' size={20}/>
     </button>
-    */}
-      <button className="send-btn" onClick={()=>setShowMessageBox(!showMessageBox)}>
-      <FaRegMessage />
-    </button>
-  </div>
-</div>
-        </div>
-</div>
-
-
-</div>
-
-    {showAudioGroup && (   
-      
-       <div style={{
-    position: 'fixed',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-    border: '1px solid #ccc',
-    borderRadius: '12px',
-    padding: '20px',
-    zIndex: 9999,
-    width: '60%',
-    boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
-  }}>
-    <button
-      style={{
-        float: 'right',
-        background: 'transparent',
-        border: 'none',
-        fontSize: '18px',
-        cursor: 'pointer',
-        color: darkMode ? '#fff' : '#333',
-      }}
-       onClick={onClose}
-    >
-      <FaWindowClose size={32}/>
-    </button>
-<div className="voice-tab">
-
-<p style={{textAlign:"center",fontSize:"18px",fontWeight:"bold"}}>Audio Groups</p>
-
-  <div className="participant-grid">
-    {participants.localParticipant && (
-      <div className="participant">
-        <div className="avatar">
-          <div
-            className="avatar img"
-            dangerouslySetInnerHTML={{
-              __html: `${participants.localParticipant.avatar}`,
-            }}
-          />
-        </div>
-        <span className="name">{participants.localParticipant.id} (You)</span>
-        <button onClick={() => toggleMic(participants.localParticipant.id)}>
-          {localMic ? <FaMicrophoneSlash /> : <FaMicrophone />}
-        </button>
-        {participants.localParticipant.speaking && (
-          <div className="speaking-indicator" />
-        )}
-      </div>
     )}
 
-    {participants.remoteParticipants.map((p, idx) => (
-      <div key={idx} className="participant">
-        <div className="avatar">
-          <div
-            className="avatar img"
-            dangerouslySetInnerHTML={{
-              __html: `${p.avatar}`,
-            }}
-          />
-        </div>
-        <span className="name">{p.id}</span>
-        <button
-          onClick={() =>
-            mutedParticipants[p.id] ? unmuteSelected(p.id) : muteSelected(p.id)
-          }
-        >
-          {mutedParticipants[p.id] ? <FaMicrophoneSlash /> : <FaMicrophone />}
-        </button>
-        {p.speaking && <div className="speaking-indicator" />}
-      </div>
-    ))}
-  </div>
+     {!isMobile && (
+<div className="button-wrapper">
+  <button className="send-btn" onClick={() => setShowMessageBox(!showMessageBox)}>
+    {showMessageBox ? <BsArrowsCollapse color='white'/> : <BsArrowsExpand color='white'/>}
+  </button>
 
-    <div className="voice-controls">
-   {muteAll?(<button onClick={unmuteAllRemote}>UnMute All</button>):(<button onClick={muteAllRemote}>Mute All</button>)} 
-    
+  {newMessage > 0 && (
+    <Badge bg="danger" className="notification-badge">
+      {newMessage}
+    </Badge>
+  )}
+</div>
+     )}
+
+      {voiceChat &&  !isMobile && (
+
+       <button className="send-btn" onClick={() => toggleMic(participants.localParticipant.id)}>
+                 {localMic ? <BsMicFill color='white' size={20}/>:<BsMicMuteFill color='white' size={20}/>}
+      </button>
+      )
+    }
+
   </div>
+</div>
+        </div>
+</div>
+
 
 </div>
-        </div>)}
-     
-<div style={{
-    position: "fixed",
-    bottom: 20,
-    right: 820,
-    zIndex: 10000000,
-    display: "flex",
-    flexDirection: "row",
-    gap: "10px"
-  }}>
+    )}
 
-        
-    <button onClick={() => setShowVoicePopup(!showVoicePopup)}>
-      VoiceGroup
-    </button>
-    </div>
+
+<Modal
+
+  show={showAudioGroup}
+  onHide={() => onClose()}
+  size="lg"
+  aria-labelledby="contained-modal-title-vcenter"
+  centered
+
+  
+>
+  
+  <div className="modal-content" style={{
+    background:darkMode?'rgba(0,0,0,0.4)':'rgba(255,255,255,0.08)'
+  }}>
+  <Modal.Body style={{ border: 'none', borderRadius: '20px', opacity: '0.95' }}>
+    <Card style={{ border: 'none', background: 'transparent', padding: '1rem' }}>
+      
+      <Row className="justify-content-center mb-3">
+        <Col xs={12}>
+          <h5 style={{ color:"#fff",textAlign: 'center', marginBottom: '0' }}>Audio Groups</h5>
+        </Col>
+      </Row>
+
+      <Row className="mb-4">
+        <Col xs={12}>
+          <p style={{ textAlign: 'justify', marginBottom: '0',color:"#fff" }}>
+            Audio group allows you to selectively mute participants in the same space,
+            enabling you to hear only the users you want to listen to. When you mute
+            someone in the audio group, it silences their audio from your end, but they
+            can still hear your voice.
+          </p>
+        </Col>
+      </Row>
+
+      <div style={{ height: '200px', overflowY: 'auto', overflowX: 'hidden' }}>
+        <Row>
+          {participants.remoteParticipants.map((item, index) => (
+            <Col
+              className='audiogroup'
+              key={index}
+              xs={12}
+              sm={6}
+              md={4}
+              lg={4}
+              xl={4}
+              style={{
+                margin: '1%',
+                display: 'flex',
+                alignItems: 'center',
+                height: '60px',
+                borderColor: 'transparent',
+                backdropFilter: 'blur(10px)',
+                borderRadius: '8px',
+                backgroundColor: '#f9f9f9cc',
+                gap: '1px',
+                padding: '12px',
+          
+              }}
+            >
+              <div style={{ width: '40px', height: '32px', flexShrink: 0 }}>
+                {item.avatar && item.avatar.includes('<svg') ? (
+                  <div
+                    className="avatar img"
+                    style={{ width: '100%', height: '100%' }}
+                    dangerouslySetInnerHTML={{
+                      __html: item.avatar.replace(/\}$/, '')
+                    }}
+                  />
+                ) : (
+                  <div
+                    className="avatar img"
+                    style={{ width: '100%', height: '100%' }}
+                  >
+                    <img
+                      src={item.avatar && item.avatar.replace(/\}$/, '')}
+                      alt="avatar"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: '50%'
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '2px'
+                }}
+              >
+                <p style={{ margin: 0, fontSize: '13px', flex: 1 }}>
+                  {item.id.split('&')[0]}
+                </p>
+                {item.speaking && (
+                  <div
+                    style={{
+                      width: '10px',
+                      height: '10px',
+                      backgroundColor: 'green',
+                      borderRadius: '50%'
+                    }}
+                  />
+                )}
+              </div>
+
+              <div style={{ flexShrink: 0 }}>
+                <button
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    border: 'none',
+                    backgroundColor: 'rgba(255,255,255,0.3)',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onClick={() =>
+                    mutedParticipants[item.id]
+                      ? unmuteSelected(item.id)
+                      : muteSelected(item.id)
+                  }
+                >
+                  {mutedParticipants[item.id] ? (
+                    <BsMicMuteFill  size={20}/>
+                  ) : (
+                    <BsMicFill  size={20}/>
+                  )}
+                </button>
+              </div>
+            </Col>
+          ))}
+        </Row>
+      </div>
+
+      <br />
+      <br />
+      <Row className="justify-content-center text-center">
+        <Col xs="auto">
+          {muteAll ? (
+            <button
+              style={{
+                padding: '12px 48px 12px 48px',
+                borderColor: 'transparent',
+                borderRadius: '6px',
+                background: '#007aff',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              onClick={unmuteAllRemote}
+            >
+              Unmute All
+            </button>
+          ) : (
+            <button
+              style={{
+                padding: '12px 48px 12px 48px',
+                borderColor: 'transparent',
+                borderRadius: '6px',
+                background: '#007aff',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              onClick={muteAllRemote}
+            >
+              Mute All
+            </button>
+          )}
+        </Col>
+      </Row>
+    </Card>
+  </Modal.Body>
+  </div>
+</Modal>
+
+
+
+
     </>
   );
 }
+
+
+const styles = {
+  button: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    border: 'none',
+    padding: '10px',
+    borderRadius: '5px',
+    color: 'white',
+    cursor: 'pointer',
+  },
+};

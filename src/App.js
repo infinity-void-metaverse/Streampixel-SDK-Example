@@ -1,13 +1,21 @@
 import React, { useEffect, useRef,useState } from 'react';
 import {StreamPixelApplication} from 'streampixelsdk';
 import VoiceChatUI from './components/VoiceChatUI';
-import {NameForgeJS} from 'nameforgejs';
 import { createAvatar } from '@dicebear/core';
 import { personas } from '@dicebear/collection';
 
 let PixelStreamingApp;
 let PixelStreamingUiApp;
 let UIControlApp;
+
+
+function isMobilePhone() {
+  const ua = navigator.userAgent || navigator.vendor || window.opera;
+  return /android|iphone|blackberry|iemobile|opera mini/i.test(ua)
+    && !/ipad|ipod/i.test(ua);
+}
+
+let isMobile = isMobilePhone();
 
 function generateRandomName() {
   const nouns = [
@@ -24,8 +32,11 @@ function generateRandomName() {
   const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
   const randomId = Math.floor(1000 + Math.random() * 9000); 
 
-  return `Anonymous${randomNoun}${randomAdjective}${randomId}`;
+  return `${randomNoun} ${randomAdjective}#${randomId}`;
+
+ //return generatedNames;
 }
+
 
 //const nameGenerator = new NameForgeJS();
 
@@ -35,6 +46,16 @@ const App = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [showAudioGroup, setShowAudioGroup] = useState(false);
 
+  const [roomDisconnect, setRoomDisconnect] = useState(false);
+
+  const [toggleMicChat, setToogleMicChat] = useState(false);
+  const [sdkConnect, setSdkConnect] = useState(false);
+  const [newMessage, setNewMessage] = useState(0);
+
+  const [roomConnect, setRoomConnect] = useState(true);
+
+    const [showChatUiMobile, setShowChatUiMobile] = useState(!isMobile);
+
   const openAudioGroup = () => {
     setShowAudioGroup(true);
   };
@@ -42,13 +63,31 @@ const App = () => {
   const closeAudioGroup = () => {
     setShowAudioGroup(false);
   };
+
+
+    const openChatUiMobile = () => {
+    setShowChatUiMobile(true);
+  };
+
+  const closeChatUiMobile = () => {
+    setShowChatUiMobile(false);
+  };
+ 
+  const handleMicChat = () => {
+    setToogleMicChat(!toggleMicChat);
+  };
+ 
+
+
+
+
  
 
   const startPlay = async () => {
     
     const { appStream, pixelStreaming, queueHandler,UIControl} = await StreamPixelApplication({
       AutoConnect: true,
-      appId: "66987bef00e9a75f67b622e4",
+      appId: "679d8cb5326a62020e8738d5",
      // useMic: true,                              true|false
      // primaryCodec:"AV1",                        'AV1|H264|VP9|VP8'
      // fallBackCodec:"H264",                      'AV1|H264|VP9|VP8'
@@ -79,6 +118,7 @@ const App = () => {
     PixelStreamingUiApp = appStream;
 
     UIControlApp = UIControl;
+  
 
         appStream.onConnectAction = function() {
           console.log("Starting connection to Streampixel server, please wait");
@@ -172,6 +212,22 @@ const App = () => {
   
     }
 
+    const enableMouseHover = ()=>{
+
+
+    if(UIControlApp){
+     UIControlApp && UIControlApp.toggleHoveringMouse(true);
+    }
+    }
+
+    const disableMouseHover = ()=>{
+
+  if(UIControlApp){
+           UIControlApp && UIControlApp.toggleHoveringMouse(false);
+  }
+
+    }
+
 
     const getResolutionOptions = async() =>{
 
@@ -183,6 +239,21 @@ const App = () => {
 
 
 const userName = generateRandomName();
+
+
+
+const handleMessageNumber =(messageLen)=>{
+
+setNewMessage(messageLen);
+
+}
+
+const handleRoomConnect =(value)=>{
+
+if(value == true){
+  setSdkConnect(true);
+}
+}
 
 
 const avatar = createAvatar(personas, {
@@ -218,7 +289,7 @@ const avatar = createAvatar(personas, {
     }}
   />
   
-  <VoiceChatUI roomName="TESTROOM" userName={userName} voiceChat={true} darkMode={darkMode}  position="Left" avatar={avatar} showAudioGroup={showAudioGroup} onClose={closeAudioGroup}/>
+  <VoiceChatUI roomConnect={roomConnect} roomDisconnect={roomDisconnect}  toggleMicChat={toggleMicChat} handleMessageNumber={handleMessageNumber} handleRoomConnect={handleRoomConnect}  darkMode={darkMode} micStart={true} roomName="TESTSDKROOM" showChatUiMobile ={showChatUiMobile} userName={userName} voiceChat={true} textChat={true} position="Left" avatar={avatar} showAudioGroup={showAudioGroup} onClose={closeAudioGroup}  onCloseChatUi={closeChatUiMobile}/>
 
   <div style={{
     position: "fixed",
@@ -231,7 +302,14 @@ const avatar = createAvatar(personas, {
   }}>
 
         
-    <button onClick={() => setDarkMode(!darkMode)}>
+   
+  
+
+      <button onClick={() => enableMouseHover()}>ENable Mouse Hover</button>
+        <button onClick={() => disableMouseHover()}>Disable Mouse Hover</button>
+{/*
+
+ <button onClick={() => setDarkMode(!darkMode)}>
       Toggle {darkMode ? 'Light' : 'Dark'} Mode
     </button>
      <button
@@ -239,13 +317,14 @@ const avatar = createAvatar(personas, {
          >
        Show Audio Group
       </button>
-  
-    <button onClick={() => getStats()}>Stats</button>
     <button onClick={() => getResolutionOptions()}>Resolution Options</button>
+    <button onClick={() => getStats()}>Stats</button>
 
     <button onClick={() => handleMicrophone()}>Mic</button>
     <button onClick={() => handleRes('1280x720')}>Resolution</button>
     <button onClick={() => toggleSound()}>Toggle Sound</button>
+
+    */}
   </div>
 </div>
 
