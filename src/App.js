@@ -1,15 +1,85 @@
 import React, { useEffect, useRef,useState } from 'react';
 import {StreamPixelApplication} from 'streampixelsdk';
-
+import VoiceChatUI from './components/VoiceChatUI';
+import { createAvatar } from '@dicebear/core';
+import { personas } from '@dicebear/collection';
 
 let PixelStreamingApp;
 let PixelStreamingUiApp;
 let UIControlApp;
 
 
+function isMobilePhone() {
+  const ua = navigator.userAgent || navigator.vendor || window.opera;
+  return /android|iphone|blackberry|iemobile|opera mini/i.test(ua)
+    && !/ipad|ipod/i.test(ua);
+}
+
+let isMobile = isMobilePhone();
+
+function generateRandomName() {
+  const nouns = [
+    "Neon", "Silent", "Ghostly", "Turbo", "Infinite", "Crimson", "Phantom", "Electric", "Quantum", "Radiant",
+    "Glitchy", "Shiny", "Hidden", "Frozen", "Vivid", "Shadow", "Velvet", "Chrome", "Virtual", "Floating"
+  ];
+
+  const adjectives = [
+    "Pixel", "Architect", "Streamer", "Prism", "Sprite", "Phantom", "Composer", "Painter", "Shader",
+    "Operator", "Lancer", "Visionary", "Cycler", "Mirage", "Voxel", "Sculptor", "Animator", "Seeker", "Renderer", "Engineer"
+  ];
+
+  const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
+  const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const randomId = Math.floor(1000 + Math.random() * 9000); 
+
+  return `${randomNoun} ${randomAdjective}#${randomId}`;
+
+ //return generatedNames;
+}
+
+
+//const nameGenerator = new NameForgeJS();
+
 const App = () => {
 
   const videoRef = useRef(null);
+  const [darkMode, setDarkMode] = useState(false);
+  const [showAudioGroup, setShowAudioGroup] = useState(false);
+
+  const [roomDisconnect, setRoomDisconnect] = useState(false);
+
+  const [toggleMicChat, setToogleMicChat] = useState(false);
+  const [sdkConnect, setSdkConnect] = useState(false);
+  const [newMessage, setNewMessage] = useState(0);
+
+  const [roomConnect, setRoomConnect] = useState(false);
+
+    const [showChatUiMobile, setShowChatUiMobile] = useState(!isMobile);
+
+  const openAudioGroup = () => {
+    setShowAudioGroup(true);
+  };
+
+  const closeAudioGroup = () => {
+    setShowAudioGroup(false);
+  };
+
+
+    const openChatUiMobile = () => {
+    setShowChatUiMobile(true);
+  };
+
+  const closeChatUiMobile = () => {
+    setShowChatUiMobile(false);
+  };
+ 
+  const handleMicChat = () => {
+    setToogleMicChat(!toggleMicChat);
+  };
+ 
+
+
+
 
  
 
@@ -17,7 +87,7 @@ const App = () => {
     
     const { appStream, pixelStreaming, queueHandler,UIControl} = await StreamPixelApplication({
       AutoConnect: true,
-      appId: "66987bef00e9a75f67b622e4",
+      appId: "679d8cb5326a62020e8738d5",
      // useMic: true,                              true|false
      // primaryCodec:"AV1",                        'AV1|H264|VP9|VP8'
      // fallBackCodec:"H264",                      'AV1|H264|VP9|VP8'
@@ -43,10 +113,12 @@ const App = () => {
 
     
 
+    
     PixelStreamingApp = pixelStreaming;
     PixelStreamingUiApp = appStream;
 
     UIControlApp = UIControl;
+  
 
         appStream.onConnectAction = function() {
           console.log("Starting connection to Streampixel server, please wait");
@@ -97,6 +169,7 @@ const App = () => {
   },[])
 
 
+
   
   const handleResponseApp = (response) => {
  console.log(response);  
@@ -131,25 +204,62 @@ const App = () => {
     }
 
   }  
-  const getStats = () => {
+  const getStats = async() => {
 
-    
-    const stats = UIControlApp.getStreamStats();
-    console.log("stats:",stats);
-
+    //const stats = UIControlApp.getStreamStats();
+   // console.log("stats:",stats);
 
   
     }
 
+    const enableMouseHover = ()=>{
 
-    const getResolutionOptions = () =>{
 
-      
-    const resolutionSettings  = UIControlApp.getResolution();
-    console.log("resolutionSettings:",resolutionSettings);
+    if(UIControlApp){
+     UIControlApp && UIControlApp.toggleHoveringMouse(true);
+    }
+    }
+
+    const disableMouseHover = ()=>{
+
+  if(UIControlApp){
+           UIControlApp && UIControlApp.toggleHoveringMouse(false);
+  }
 
     }
 
+
+    const getResolutionOptions = async() =>{
+
+
+   // const resolutionSettings  = UIControlApp.getResolution();
+   // console.log("resolutionSettings:",resolutionSettings);
+
+    }
+
+
+const userName = generateRandomName();
+
+
+
+const handleMessageNumber =(messageLen)=>{
+
+setNewMessage(messageLen);
+
+}
+
+const handleRoomConnect =(value)=>{
+
+if(value == true){
+  setSdkConnect(true);
+}
+}
+
+
+const avatar = createAvatar(personas, {
+  seed: userName,
+  size: 32,
+}).toString();
 
 
   const handleMicrophone =async()=>{
@@ -162,12 +272,14 @@ const App = () => {
         }
 
     }
-  
+
+        
 
   return (
     
 <div className='containMain'>
-  <div
+  
+<div
     id="videoElement"
     ref={videoRef}
     style={{
@@ -176,6 +288,8 @@ const App = () => {
       position: "relative"
     }}
   />
+  
+  <VoiceChatUI roomConnect={roomConnect} roomDisconnect={roomDisconnect}  toggleMicChat={toggleMicChat} handleMessageNumber={handleMessageNumber} handleRoomConnect={handleRoomConnect}  darkMode={darkMode} micStart={true} roomName="TESTSDKROOM" showChatUiMobile ={showChatUiMobile} userName={userName} voiceChat={true} textChat={true} position="Left" avatar={avatar} showAudioGroup={showAudioGroup} onClose={closeAudioGroup}  onCloseChatUi={closeChatUiMobile}/>
 
   <div style={{
     position: "fixed",
@@ -186,12 +300,31 @@ const App = () => {
     flexDirection: "row",
     gap: "10px"
   }}>
-    <button onClick={() => getStats()}>Stats</button>
+
+        
+   
+  
+
+      <button onClick={() => enableMouseHover()}>ENable Mouse Hover</button>
+        <button onClick={() => disableMouseHover()}>Disable Mouse Hover</button>
+{/*
+
+ <button onClick={() => setDarkMode(!darkMode)}>
+      Toggle {darkMode ? 'Light' : 'Dark'} Mode
+    </button>
+     <button
+        onClick={openAudioGroup}
+         >
+       Show Audio Group
+      </button>
     <button onClick={() => getResolutionOptions()}>Resolution Options</button>
+    <button onClick={() => getStats()}>Stats</button>
 
     <button onClick={() => handleMicrophone()}>Mic</button>
     <button onClick={() => handleRes('1280x720')}>Resolution</button>
     <button onClick={() => toggleSound()}>Toggle Sound</button>
+
+    */}
   </div>
 </div>
 
