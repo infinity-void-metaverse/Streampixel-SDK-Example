@@ -87,7 +87,7 @@ const App = () => {
     
     const { appStream, pixelStreaming, queueHandler,UIControl} = await StreamPixelApplication({
       AutoConnect: true,
-      appId: "679d8cb5326a62020e8738d5",
+      appId: "66987bef00e9a75f67b622e4",
      // useMic: true,                              true|false
      // primaryCodec:"AV1",                        'AV1|H264|VP9|VP8'
      // fallBackCodec:"H264",                      'AV1|H264|VP9|VP8'
