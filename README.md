@@ -13,4 +13,5 @@ This is an example project demonstrating how to integrate the latest StreamPixel
   - Change Resolution
   - View Stats
   - Fetch Available Resolution Options
+  - Voice & Text Chat
 - 🔄 **Response Listener** (`handle_responses`)
