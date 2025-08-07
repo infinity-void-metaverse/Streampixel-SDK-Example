@@ -52,7 +52,7 @@ const App = () => {
   const [sdkConnect, setSdkConnect] = useState(false);
   const [newMessage, setNewMessage] = useState(0);
 
-  const [roomConnect, setRoomConnect] = useState(true);
+  const [roomConnect, setRoomConnect] = useState(false);
 
     const [showChatUiMobile, setShowChatUiMobile] = useState(!isMobile);
 
