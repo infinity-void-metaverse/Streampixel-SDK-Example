@@ -54,7 +54,7 @@ const App = () => {
 
   const [roomConnect, setRoomConnect] = useState(false);
 
-    const [showChatUiMobile, setShowChatUiMobile] = useState(!isMobile);
+  const [showChatUiMobile, setShowChatUiMobile] = useState(!isMobile);
 
   const openAudioGroup = () => {
     setShowAudioGroup(true);
@@ -97,7 +97,7 @@ const App = () => {
      // gamepadInput:false,                        true|false
      // hoverMouse:true,                           true|false
      // xrInput:false,                             true|false
-     //showResolution:true                         true|false
+     //showResolution:true,                         true|false
      // keyBoardInput:true,                        true|false
     //  fakeMouseWithTouches:false,                true|false
    //   maxStreamQuality:'720p (1280x720)',        [  "360p (640x360)","480p (854x480)","720p (1280x720)","1080p (1920x1080)","1440p (2560x1440)","4K (3840x2160)"]
@@ -111,9 +111,7 @@ const App = () => {
    //minQP:20
     });
 
-    
-
-    
+        
     PixelStreamingApp = pixelStreaming;
     PixelStreamingUiApp = appStream;
 
@@ -155,6 +153,7 @@ const App = () => {
 
     const videoElement = appStream && appStream.stream.videoElementParent.querySelector("video");
     if(videoElement){
+
       videoElement.muted = false;
       videoElement.focus();
       videoElement.autoplay = true;
@@ -289,7 +288,7 @@ const avatar = createAvatar(personas, {
     }}
   />
   
-  <VoiceChatUI roomConnect={roomConnect} roomDisconnect={roomDisconnect}  toggleMicChat={toggleMicChat} handleMessageNumber={handleMessageNumber} handleRoomConnect={handleRoomConnect}  darkMode={darkMode} micStart={true} roomName="TESTSDKROOM" showChatUiMobile ={showChatUiMobile} userName={userName} voiceChat={true} textChat={true} position="Left" avatar={avatar} showAudioGroup={showAudioGroup} onClose={closeAudioGroup}  onCloseChatUi={closeChatUiMobile}/>
+  <VoiceChatUI roomConnect={roomConnect} roomDisconnect={roomDisconnect} toggleMicChat={toggleMicChat} handleMessageNumber={handleMessageNumber} handleRoomConnect={handleRoomConnect}  darkMode={darkMode} micStart={true} roomName="TESTSDKROOM" showChatUiMobile ={showChatUiMobile} userName={userName} voiceChat={true} textChat={true} position="Left" avatar={avatar} showAudioGroup={showAudioGroup} onClose={closeAudioGroup}  onCloseChatUi={closeChatUiMobile}/>
 
   <div style={{
     position: "fixed",
