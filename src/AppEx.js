@@ -56,6 +56,15 @@ const App = () => {
 
   const [showChatUiMobile, setShowChatUiMobile] = useState(!isMobile);
 
+
+    const params = new URLSearchParams(window.location.search);
+
+  const sfuPlayer = params.get("sfuPlayer") || "false";
+  const sfuHost = params.get("sfuHost") || "false";
+
+
+
+
   const openAudioGroup = () => {
     setShowAudioGroup(true);
   };
@@ -84,7 +93,9 @@ const App = () => {
     const { appStream, pixelStreaming, queueHandler,UIControl} = await StreamPixelApplication({
       AutoConnect: true,
       appId: "690edd608cb8eea6c9c64dc2",
-      sfuHost:"true",    /* "true"|"false"*   default:"false"  type: String */
+      streamerId:"abcdef1234",
+      sfuHost,
+      sfuPlayer    /* "true"|"false"*   default:"false"  type: String */
      // sfuPlayer:"false", /* "true" | "false" * default:"false"  type: String */
      // useMic: true,                              true|false
      // primaryCodec:"AV1",                        'AV1|H264|VP9|VP8'
