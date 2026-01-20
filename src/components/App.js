@@ -3,8 +3,6 @@ import {StreamPixelApplication} from 'streampixelsdk';
 
 
 let PixelStreamingApp;
-let PixelStreamingUiApp;
-let UIControlApp;
 
 
 
@@ -64,9 +62,7 @@ const App = () => {
 
         
     PixelStreamingApp = pixelStreaming;
-    PixelStreamingUiApp = appStream;
 
-    UIControlApp = UIControl;
   
     appStream.onVideoInitialized = () => {
       videoRef.current.append(appStream.rootElement);
@@ -105,7 +101,7 @@ const App = () => {
     if(projectId){
     startPlay();
     }
-  },[projectId])
+  },[])
 
 
 
