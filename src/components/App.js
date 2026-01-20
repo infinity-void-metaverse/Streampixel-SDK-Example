@@ -3,6 +3,8 @@ import {StreamPixelApplication} from 'streampixelsdk';
 
 
 let PixelStreamingApp;
+let PixelStreamingUiApp;
+let UIControlApp;
 
 
 
@@ -51,7 +53,7 @@ const App = () => {
   const startPlay = async () => {
 
     
-    const { appStream, pixelStreaming, queueHandler} = await StreamPixelApplication({
+    const { appStream, pixelStreaming, queueHandler,UIControl} = await StreamPixelApplication({
       AutoConnect: true,
       appId: projectId,
       streamerId:streamerId,
@@ -62,7 +64,9 @@ const App = () => {
 
         
     PixelStreamingApp = pixelStreaming;
+    PixelStreamingUiApp = appStream;
 
+    UIControlApp = UIControl;
   
     appStream.onVideoInitialized = () => {
       videoRef.current.append(appStream.rootElement);
@@ -97,9 +101,9 @@ const App = () => {
 
   };
 
-  useEffect(async ()=>{
+  useEffect(()=>{
     if(projectId){
-    await startPlay();
+    startPlay();
     }
   },[projectId])
 
