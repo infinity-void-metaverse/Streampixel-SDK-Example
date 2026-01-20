@@ -29,15 +29,15 @@ const App = () => {
 
 
      for (const [key, value] of urlSearchParams.entries()) {
-        if (key == 'streamerId') {
+        if (key === 'streamerId') {
         setStreamerId(value);
        }
-           if (key == 'sfuHost') {
+           if (key === 'sfuHost') {
 
 
         setSfuHost(value);
        }
-           if (key == 'sfuPlayer') {
+           if (key === 'sfuPlayer') {
 
 
         setSfuPlayer(value);
@@ -47,7 +47,7 @@ const App = () => {
     } else {
     }
 
-  }, []);
+  }, [urlPart]);
 
 
   const startPlay = async () => {
