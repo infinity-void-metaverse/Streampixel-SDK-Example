@@ -56,6 +56,15 @@ const App = () => {
 
   const [showChatUiMobile, setShowChatUiMobile] = useState(!isMobile);
 
+
+    const params = new URLSearchParams(window.location.search);
+
+  const sfuPlayer = params.get("sfuPlayer") || "false";
+  const sfuHost = params.get("sfuHost") || "false";
+
+
+
+
   const openAudioGroup = () => {
     setShowAudioGroup(true);
   };
@@ -79,15 +88,15 @@ const App = () => {
  
 
 
-
-
- 
-
   const startPlay = async () => {
     
     const { appStream, pixelStreaming, queueHandler,UIControl} = await StreamPixelApplication({
       AutoConnect: true,
-      appId: "66987bef00e9a75f67b622e4",
+      appId: "690edd608cb8eea6c9c64dc2",
+      streamerId:"abcdef1234",
+      sfuHost,
+      sfuPlayer    /* "true"|"false"*   default:"false"  type: String */
+     // sfuPlayer:"false", /* "true" | "false" * default:"false"  type: String */
      // useMic: true,                              true|false
      // primaryCodec:"AV1",                        'AV1|H264|VP9|VP8'
      // fallBackCodec:"H264",                      'AV1|H264|VP9|VP8'
@@ -118,16 +127,7 @@ const App = () => {
     UIControlApp = UIControl;
   
 
-        appStream.onConnectAction = function() {
-          console.log("Starting connection to Streampixel server, please wait");
-    }
-
-        appStream.onWebRtcConnecting = function() {
-          console.log("Almost there, hold tight- awesomeness loading");
-    }
-            appStream.onWebRtcConnected = function() {
-          console.log("Sharpening pixels and buffing the details...");
-    }
+      
 
 
     appStream.onVideoInitialized = () => {
