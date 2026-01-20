@@ -51,7 +51,7 @@ const App = () => {
   const startPlay = async () => {
 
     
-    const { appStream, pixelStreaming, queueHandler,UIControl} = await StreamPixelApplication({
+    const { appStream, pixelStreaming, queueHandler} = await StreamPixelApplication({
       AutoConnect: true,
       appId: projectId,
       streamerId:streamerId,
@@ -97,11 +97,11 @@ const App = () => {
 
   };
 
-  useEffect(()=>{
+  useEffect(async ()=>{
     if(projectId){
-    startPlay();
+    await startPlay();
     }
-  },[])
+  },[projectId])
 
 
 
