@@ -23,7 +23,10 @@
     "streampixelsdk": "git+https://github.com/infinity-void-metaverse/Streampixel-Web-SDK.git#staging"
   },
   "scripts": {
-    "start": "react-scripts start"
+    "start": "react-scripts start",
+    "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build"
+  }
+}
   },
   "eslintConfig": {
     "extends": [
