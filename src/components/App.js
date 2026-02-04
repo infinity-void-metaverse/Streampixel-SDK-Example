@@ -58,7 +58,8 @@ const App = () => {
       appId: projectId,
       streamerId:streamerId,
       sfuHost:sfuHost,
-      sfuPlayer:sfuPlayer
+      sfuPlayer:sfuPlayer,
+      forceTurn:true  //  true|false
 
     });
 
