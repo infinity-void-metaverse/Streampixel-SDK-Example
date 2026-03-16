@@ -62,6 +62,7 @@ const App = () => {
       forceTurn:true  //  true|false
 
     });
+      
 
         
     PixelStreamingApp = pixelStreaming;
@@ -79,7 +80,6 @@ const App = () => {
     }
 
     
-
     queueHandler((msg) => {
       console.log("User is in queue at position:", msg.position);
      
@@ -116,7 +116,12 @@ const handleResponseApp = (response) => {
   };
 
 
+  const getStats = async() => {
 
+    const stats = UIControlApp.getStreamStats();
+    console.log("stats:",stats);
+
+    }
 
  
   return (
@@ -133,6 +138,7 @@ const handleResponseApp = (response) => {
     }}
   />
   
+    <button onClick={() => getStats()}>Stats</button>
 
  
 </div>
