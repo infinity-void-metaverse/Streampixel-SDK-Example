@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E '\\\\.\\(js|jsx|css\\)$')",
+      "Bash(xargs grep:*)",
+      "Bash(find /g/Streampixel-SDK-Example/node_modules/@epicgames-ps -name *.js -type f)",
+      "Bash(find /g/Streampixel-SDK-Example/node_modules/@epicgames-ps -name *.js -type f -path */UI/*)",
+      "Bash(find /g/Streampixel-SDK-Example/node_modules -type f \\\\\\(-name *stats* -o -name *afk* \\\\\\) \\\\\\(-name *.js -o -name *.ts \\\\\\))"
+    ]
+  }
+}
