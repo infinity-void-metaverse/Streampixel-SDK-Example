@@ -166,7 +166,7 @@ const App = () => {
 
        Everything else below is optional client-side overrides.
        ===================================================================== */
-    const { appStream, pixelStreaming, queueHandler, UIControl } = await StreamPixelApplication({
+    const { appStream, pixelStreaming, queueHandler, UIControl,reconnectStream } = await StreamPixelApplication({
 
       // ── Required ──────────────────────────────────────────────────────
       appId: projectId,              // Project ID (from URL or hardcoded)
@@ -225,6 +225,46 @@ const App = () => {
     PixelStreamingApp = pixelStreaming;
     PixelStreamingUiApp = appStream;
     UIControlApp = UIControl;
+
+
+    
+    reconnectStream.on("state", (data) => {
+  switch (data.status) {
+    case "connecting":
+    case "reconnecting":
+      // RESET ALL STATES
+
+      setIsMuted(true);
+
+      console.log("Reconnecting...");
+      setLoadingTitle('Reconnecting Please Wait');
+      setLoadingSubtitle();
+      setLoadingStatus();
+      setLoadingProgress(0);
+      break;
+
+    case "retrying":
+      console.log("Retry attempt...");
+      break;
+
+    case "connected":
+      console.log("Connected again!");
+      setLoadingTitle('Connected');
+      break;
+
+    case "disconnected":
+      console.log("Disconnected:", data.code);
+      break;
+
+    case "failed":
+      console.log("Reconnect failed!");
+      setLoadingTitle('Reconnecting failed');
+      setLoadingSubtitle();
+      setLoadingStatus();
+      setLoadingProgress(0);
+      break;
+  }
+});
 
     /* =====================================================================
        Hide the default Pixel Streaming UI overlay (top-left controls).
