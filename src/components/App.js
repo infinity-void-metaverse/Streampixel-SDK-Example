@@ -155,13 +155,71 @@ const App = () => {
     setLoadingStatus(LOADING_CONFIG.statusMessages.connecting);
     setLoadingProgress(10);
 
+    /* =====================================================================
+       StreamPixelApplication() — Initialize the SDK.
+
+       The `appId` is your project ID from the StreamPixel dashboard.
+       It tells the SDK which signaling server, TURN credentials, and
+       UE instance pool to use. All server-side config (URLs, auth,
+       instance allocation) is managed by the dashboard — you only
+       need the appId on the client side.
+
+       Everything else below is optional client-side overrides.
+       ===================================================================== */
     const { appStream, pixelStreaming, queueHandler, UIControl } = await StreamPixelApplication({
-      AutoConnect: true,
-      appId: projectId,
-      streamerId: streamerId,
-      sfuHost: sfuHost,
-      sfuPlayer: sfuPlayer,
-      forceTurn: true  //  true|false
+
+      // ── Required ──────────────────────────────────────────────────────
+      appId: projectId,              // Project ID (from URL or hardcoded)
+
+      // ── Connection ────────────────────────────────────────────────────
+      AutoConnect: true,             // Connect immediately on init
+      streamerId: streamerId,        // Target a specific streamer instance (optional)
+      sfuHost: sfuHost,              // SFU host mode: "true" | "false" (default: "false")
+      sfuPlayer: sfuPlayer,          // SFU viewer mode: "true" | "false" (default: "false")
+      forceTurn: true,               // Force TURN relay (helps behind strict firewalls)
+      // region: "Asia-pacific",     // Auto-detected from appId; no need to set manually
+
+      // ── Video Playback ────────────────────────────────────────────────
+      // AutoPlayVideo: true,        // Auto-play video on load
+      // StartVideoMuted: true,      // Start with video audio muted
+
+      // ── Codec ─────────────────────────────────────────────────────────
+      // primaryCodec: "AV1",        // Preferred codec: 'AV1' | 'H264' | 'VP9' | 'VP8'
+      // fallBackCodec: "H264",      // Fallback if primary not supported by browser
+
+      // ── Resolution ────────────────────────────────────────────────────
+      // maxStreamQuality: '720p (1280x720)',
+      //   Options: "360p (640x360)" | "480p (854x480)" | "720p (1280x720)"
+      //          | "1080p (1920x1080)" | "1440p (2560x1440)" | "4K (3840x2160)"
+      // startResolution: "720p (1280x720)",        // Desktop initial resolution
+      // startResolutionMobile: "480p (854x480)",   // Mobile initial resolution
+      // startResolutionTab: "1080p (1920x1080)",   // Tablet initial resolution
+      // resolutionMode: "Fixed Resolution Mode",
+      //   Options: "Fixed Resolution Mode" | "Crop on Resize Mode" | "Dynamic Resolution Mode"
+      // resX: 1920,                 // Custom resolution width (pixels)
+      // resY: 1080,                 // Custom resolution height (pixels)
+      // resolution: true,           // Enable resolution control
+
+      // ── Bitrate / Quality ─────────────────────────────────────────────
+      // minBitrate: 1,              // Minimum bitrate (Mbps)
+      // maxBitrate: 100,            // Maximum bitrate (Mbps)
+      // minQP: 20,                  // Min quantization param (1-51, lower = better quality)
+      // maxQP: -1,                  // Max quantization param (-1 = no limit)
+
+      // ── Input ─────────────────────────────────────────────────────────
+      // mouseInput: true,           // Enable mouse input
+      // keyBoardInput: true,        // Enable keyboard input
+      // touchInput: true,           // Enable touch input
+      // gamepadInput: false,        // Enable gamepad/controller input
+      // hoverMouse: true,           // Send mouse hover/move events to UE
+      // fakeMouseWithTouches: false, // Convert touch events to mouse events
+      // xrInput: false,             // Enable WebXR (VR/AR) input
+
+      // ── Audio ─────────────────────────────────────────────────────────
+      // useMic: true,               // Enable microphone input (sent to UE)
+
+      // ── AFK / Timeout ─────────────────────────────────────────────────
+      // afktimeout: 120,            // Idle timeout in seconds (min: 1, max: 7200)
     });
 
     PixelStreamingApp = pixelStreaming;

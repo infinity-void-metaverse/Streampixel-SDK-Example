@@ -145,10 +145,23 @@ Example: `http://localhost:3000/YOUR_ID?sfuPlayer=true&streamerId=myStreamer`
 
 ## SDK Configuration Options
 
-The `StreamPixelApplication()` call accepts a configuration object. Here are all available options:
+### Understanding `appId`
+
+The **`appId`** is the only required parameter. It's your project ID from the StreamPixel dashboard. When the SDK receives an `appId`, it uses it to look up all server-side configuration:
+
+- **Signaling server URL** — Where to negotiate the WebRTC connection
+- **TURN server credentials** — For NAT traversal / relaying media
+- **UE instance pool** — Which Unreal Engine instances to connect to
+- **Session auth / tokens** — Handled automatically by the SDK
+- **Matchmaker routing** — How users are assigned to instances
+
+You **don't need to configure** signaling URLs, TURN servers, ICE configs, or auth tokens on the client — all of that is managed through the dashboard and resolved automatically from the `appId`. The remaining parameters below are optional client-side overrides for video, input, and behavior settings.
+
+### Full Configuration Reference
 
 ```js
 const { appStream, pixelStreaming, queueHandler, UIControl } = await StreamPixelApplication({
+
   // ── Required ──────────────────────────────────────────────
   appId: "your_project_id",       // Project ID from StreamPixel dashboard
 
@@ -158,10 +171,17 @@ const { appStream, pixelStreaming, queueHandler, UIControl } = await StreamPixel
   sfuHost: "false",               // SFU host mode — "true" | "false"
   sfuPlayer: "false",             // SFU viewer mode — "true" | "false"
   forceTurn: true,                // Force TURN relay (helps with strict firewalls)
+  // region: "Asia-pacific",      // Auto-detected from appId; no need to set manually
 
-  // ── Video ─────────────────────────────────────────────────
+  // ── Video Playback ────────────────────────────────────────
+  AutoPlayVideo: true,            // Auto-play video on load
+  StartVideoMuted: true,          // Start with video audio muted
+
+  // ── Codec ─────────────────────────────────────────────────
   primaryCodec: "AV1",            // Preferred codec: 'AV1' | 'H264' | 'VP9' | 'VP8'
-  fallBackCodec: "H264",          // Fallback if primary not supported
+  fallBackCodec: "H264",          // Fallback if primary not supported by browser
+
+  // ── Resolution ────────────────────────────────────────────
   maxStreamQuality: '720p (1280x720)',  // Max resolution cap
   // Available: "360p (640x360)", "480p (854x480)", "720p (1280x720)",
   //            "1080p (1920x1080)", "1440p (2560x1440)", "4K (3840x2160)"
@@ -170,10 +190,13 @@ const { appStream, pixelStreaming, queueHandler, UIControl } = await StreamPixel
   startResolutionTab: "1080p (1920x1080)",  // Tablet starting resolution
   resolutionMode: "Fixed Resolution Mode",
   // Options: "Fixed Resolution Mode" | "Crop on Resize Mode" | "Dynamic Resolution Mode"
+  resX: 1920,                     // Custom resolution width (pixels)
+  resY: 1080,                     // Custom resolution height (pixels)
+  resolution: true,               // Enable resolution control
 
   // ── Bitrate / Quality ─────────────────────────────────────
-  minBitrate: 1,                  // Minimum WebRTC bitrate
-  maxBitrate: 100,                // Maximum WebRTC bitrate
+  minBitrate: 1,                  // Minimum bitrate (Mbps)
+  maxBitrate: 100,                // Maximum bitrate (Mbps)
   minQP: 20,                     // Min quantization param (1-51, lower = better quality)
   maxQP: -1,                     // Max quantization param (-1 = no limit)
 
@@ -181,16 +204,16 @@ const { appStream, pixelStreaming, queueHandler, UIControl } = await StreamPixel
   mouseInput: true,               // Enable mouse input
   touchInput: true,               // Enable touch input
   keyBoardInput: true,            // Enable keyboard input
-  gamepadInput: false,            // Enable gamepad input
-  hoverMouse: true,               // Send mouse hover/move events
-  fakeMouseWithTouches: false,    // Convert touch to mouse events
-  xrInput: false,                 // Enable WebXR input
+  gamepadInput: false,            // Enable gamepad/controller input
+  hoverMouse: true,               // Send mouse hover/move events to UE
+  fakeMouseWithTouches: false,    // Convert touch events to mouse events
+  xrInput: false,                 // Enable WebXR (VR/AR) input
 
   // ── Audio ─────────────────────────────────────────────────
-  useMic: true,                   // Enable microphone input to UE
+  useMic: true,                   // Enable microphone input (sent to UE)
 
   // ── AFK / Timeout ─────────────────────────────────────────
-  afktimeout: 5000,               // Idle timeout in seconds (min: 1, max: 7200)
+  afktimeout: 120,                // Idle timeout in seconds (min: 1, max: 7200)
 });
 ```
 

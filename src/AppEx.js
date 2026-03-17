@@ -197,34 +197,64 @@ const App = () => {
     setLoadingStatus(LOADING_CONFIG.statusMessages.connecting);
     setLoadingProgress(10);
 
+    /* =====================================================================
+       StreamPixelApplication() — Initialize the SDK.
+
+       The `appId` is your project ID from the StreamPixel dashboard.
+       It resolves all server-side config automatically (signaling URL,
+       TURN credentials, UE instance pool, auth). You only need the
+       appId on the client side — everything else below is optional.
+       ===================================================================== */
     const { appStream, pixelStreaming, queueHandler, UIControl } = await StreamPixelApplication({
+
+      // ── Required ──────────────────────────────────────────────────────
+      appId: "690edd608cb8eea6c9c64dc2",  // Hardcoded project ID (demo)
+
+      // ── Connection ────────────────────────────────────────────────────
       AutoConnect: true,
-      appId: "690edd608cb8eea6c9c64dc2",
       streamerId: "abcdef1234",
-      sfuHost,
-      sfuPlayer    /* "true"|"false"*   default:"false"  type: String */
-     // sfuPlayer:"false", /* "true" | "false" * default:"false"  type: String */
-     // useMic: true,                              true|false
-     // primaryCodec:"AV1",                        'AV1|H264|VP9|VP8'
-     // fallBackCodec:"H264",                      'AV1|H264|VP9|VP8'
-      //afktimeout:5000,                           'Min. 1 Max 7200 Seconds'
-     // touchInput:true,                           true|false
-     // mouseInput:true,                           true|false
-     // gamepadInput:false,                        true|false
-     // hoverMouse:true,                           true|false
-     // xrInput:false,                             true|false
-     //showResolution:true,                         true|false
-     // keyBoardInput:true,                        true|false
-    //  fakeMouseWithTouches:false,                true|false
-   //   maxStreamQuality:'720p (1280x720)',        [  "360p (640x360)","480p (854x480)","720p (1280x720)","1080p (1920x1080)","1440p (2560x1440)","4K (3840x2160)"]
-   //   startResolutionMobile:'480p (854x480)',
-   //   startResolutionTab:'1080p (1920x1080)',
-   //   startResolution:"720p (1280x720)",
-   //   resolutionMode:"Fixed Resolution Mode"     ["Fixed Resolution Mode"|| "Crop on Resize Mode" || "Dynamic Resolution Mode"]
-   //minBitrate:1
-   //maxBitrate:100
-   //maxQP:-1
-   //minQP:20
+      sfuHost,                       // From URL param, default "false"
+      sfuPlayer,                     // From URL param, default "false"
+      // forceTurn: true,            // Force TURN relay
+      // region: "Asia-pacific",     // Auto-detected from appId; no need to set manually
+
+      // ── Video Playback ────────────────────────────────────────────────
+      // AutoPlayVideo: true,
+      // StartVideoMuted: true,
+
+      // ── Codec ─────────────────────────────────────────────────────────
+      // primaryCodec: "AV1",        // 'AV1' | 'H264' | 'VP9' | 'VP8'
+      // fallBackCodec: "H264",
+
+      // ── Resolution ────────────────────────────────────────────────────
+      // maxStreamQuality: '720p (1280x720)',
+      // startResolution: "720p (1280x720)",
+      // startResolutionMobile: "480p (854x480)",
+      // startResolutionTab: "1080p (1920x1080)",
+      // resolutionMode: "Fixed Resolution Mode",
+      // resX: 1920,
+      // resY: 1080,
+
+      // ── Bitrate / Quality ─────────────────────────────────────────────
+      // minBitrate: 1,
+      // maxBitrate: 100,
+      // minQP: 20,
+      // maxQP: -1,
+
+      // ── Input ─────────────────────────────────────────────────────────
+      // mouseInput: true,
+      // keyBoardInput: true,
+      // touchInput: true,
+      // gamepadInput: false,
+      // hoverMouse: true,
+      // fakeMouseWithTouches: false,
+      // xrInput: false,
+
+      // ── Audio ─────────────────────────────────────────────────────────
+      // useMic: true,
+
+      // ── AFK / Timeout ─────────────────────────────────────────────────
+      // afktimeout: 120,            // seconds (min: 1, max: 7200)
     });
 
     PixelStreamingApp = pixelStreaming;
