@@ -179,8 +179,9 @@ const App = () => {
 
        Everything else below is optional client-side overrides.
        ===================================================================== */
-    const { appStream, pixelStreaming, queueHandler, UIControl,reconnectStream } = await StreamPixelApplication({
+    const { appStream, pixelStreaming, queueHandler,UIControl,reconnectStream } = await StreamPixelApplication({
 
+      
       // ── Required ──────────────────────────────────────────────────────
       appId: projectId,              // Project ID (from URL or hardcoded)
 
@@ -235,11 +236,16 @@ const App = () => {
       // afktimeout: 120,            // Idle timeout in seconds (min: 1, max: 7200)
     });
 
+
+    
+
     PixelStreamingApp = pixelStreaming;
     PixelStreamingUiApp = appStream;
     UIControlApp = UIControl;
+   
 
 
+    console.log("UIControlApp:",UIControlApp);
     
     /* =====================================================================
        Reconnection Lifecycle → Loading Screen Updates
@@ -437,6 +443,8 @@ const App = () => {
       startPlay();
     }
   }, [projectId]);
+
+
 
 
   const handleResponseApp = (response) => {
