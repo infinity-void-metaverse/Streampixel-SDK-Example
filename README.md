@@ -17,6 +17,7 @@ A comprehensive React example showing how to integrate the **StreamPixel Web SDK
 - [Stream Controls](#stream-controls)
 - [AFK (Idle) Timeout Handling](#afk-idle-timeout-handling)
 - [Stats / Info Panel](#stats--info-panel)
+- [Reconnection Handling](#reconnection-handling)
 - [Queue System](#queue-system)
 - [Voice & Text Chat (AppEx)](#voice--text-chat-appex)
 - [Sending Commands to Unreal Engine](#sending-commands-to-unreal-engine)
@@ -227,6 +228,7 @@ The SDK returns four objects:
 | `pixelStreaming`  | Core SDK — event listeners, input control, codec/bitrate settings, connect/disconnect |
 | `queueHandler`    | Callback to receive queue position updates |
 | `UIControl`       | UI helpers — toggle audio, change resolution, toggle mouse hover, get stats |
+| `reconnectStream` | Reconnection lifecycle — emits state events when the SDK auto-reconnects |
 
 ---
 
@@ -297,7 +299,7 @@ const LOADING_CONFIG = {
   showSpinner: true,                 // Show/hide the spinner
   queueMessage: (pos) => `You are in queue at position ${pos}`,
 
-  // Each status message maps to a WebRTC lifecycle event:
+  // Status messages for WebRTC lifecycle events:
   statusMessages: {
     initializing:     'Initializing...',
     connecting:       'Connecting to server...',
@@ -309,7 +311,20 @@ const LOADING_CONFIG = {
     inQueue:          'Waiting in queue...',
     failed:           'Connection failed. Please try again.',
     disconnected:     'Disconnected from stream.',
+
+    // Reconnection status messages:
+    reconnecting:     'Reconnecting to stream...',
+    retrying:         'Retrying connection...',
+    reconnected:      'Reconnected! Loading stream...',
+    reconnectFailed:  'Unable to reconnect. Please refresh the page.',
   },
+
+  // Reconnection screen titles & subtitles:
+  reconnectingTitle:       'Reconnecting',
+  reconnectingSubtitle:    'Please wait while we restore your session...',
+  reconnectedTitle:        'Reconnected',
+  reconnectFailedTitle:    'Reconnection Failed',
+  reconnectFailedSubtitle: 'We were unable to restore your session.',
 };
 ```
 
@@ -459,6 +474,49 @@ aggregatedStats = {
 The `extractPSStats()` helper function extracts the same fields shown in the default Pixel Streaming stats panel. Codec names are resolved from the `codecs` Map (e.g., `codecId → stats.codecs.get(codecId).mimeType → "video/AV1" → "AV1"`).
 
 > **Note:** `UIControl.getStreamStats()` returns `void` — it only triggers stats collection. Always use the `statsReceived` event to receive actual data.
+
+---
+
+## Reconnection Handling
+
+The SDK returns a `reconnectStream` object that emits state events when the connection drops and the SDK attempts to auto-reconnect. This example wires those events into the same loading screen UI, so users see clear feedback throughout:
+
+```js
+const { reconnectStream } = await StreamPixelApplication({ appId: "..." });
+
+reconnectStream.on("state", (data) => {
+  switch (data.status) {
+    case "connecting":     // Initial reconnect attempt started
+    case "reconnecting":   // Reconnect in progress
+    case "retrying":       // Retrying after a failed attempt
+    case "connected":      // Reconnected — waiting for stream to resume
+    case "disconnected":   // Connection dropped (before retry begins)
+    case "failed":         // All reconnect attempts exhausted
+  }
+});
+```
+
+### Reconnection Flow
+
+```
+Connection lost → reconnecting → retrying (1..N) → connected → stream resumes
+                                       ↓
+                                    failed (all retries exhausted)
+```
+
+### What the User Sees
+
+| SDK State | Loading Title | Status Message | Progress |
+|-----------|---------------|----------------|----------|
+| `connecting` / `reconnecting` | "Reconnecting" | "Reconnecting to stream..." | 20% |
+| `retrying` | (unchanged) | "Retrying connection..." | 40% |
+| `connected` | "Reconnected" | "Reconnected! Loading stream..." | 70% |
+| `disconnected` | "Disconnected" | "Disconnected from stream." | 0% |
+| `failed` | "Reconnection Failed" | "Unable to reconnect. Please refresh the page." | 0% |
+
+On a successful reconnect (`connected`), the loading overlay stays visible until the stream's `onVideoInitialized` callback fires — so the user sees smooth progress from reconnect through to video playback.
+
+All reconnection text is customizable via `LOADING_CONFIG` (see [Custom Loading Screen](#custom-loading-screen)).
 
 ---
 

@@ -51,7 +51,20 @@ const LOADING_CONFIG = {
     inQueue:         'Waiting in queue...',
     failed:          'Connection failed. Please try again.',
     disconnected:    'Disconnected from stream.',
+
+    // Reconnection status messages
+    reconnecting:    'Reconnecting to stream...',
+    retrying:        'Retrying connection...',
+    reconnected:     'Reconnected! Loading stream...',
+    reconnectFailed: 'Unable to reconnect. Please refresh the page.',
   },
+
+  // Reconnection screen titles & subtitles
+  reconnectingTitle:    'Reconnecting',
+  reconnectingSubtitle: 'Please wait while we restore your session...',
+  reconnectedTitle:     'Reconnected',
+  reconnectFailedTitle: 'Reconnection Failed',
+  reconnectFailedSubtitle: 'We were unable to restore your session.',
 };
 
 
@@ -228,43 +241,56 @@ const App = () => {
 
 
     
+    /* =====================================================================
+       Reconnection Lifecycle → Loading Screen Updates
+       ===================================================================== */
     reconnectStream.on("state", (data) => {
-  switch (data.status) {
-    case "connecting":
-    case "reconnecting":
-      // RESET ALL STATES
+      switch (data.status) {
+        case "connecting":
+        case "reconnecting":
+          // Show loading overlay with reconnecting state
+          setIsLoading(true);
+          setIsMuted(true);
+          setLoadingTitle(LOADING_CONFIG.reconnectingTitle);
+          setLoadingSubtitle(LOADING_CONFIG.reconnectingSubtitle);
+          setLoadingStatus(LOADING_CONFIG.statusMessages.reconnecting);
+          setLoadingProgress(20);
+          break;
 
-      setIsMuted(true);
+        case "retrying":
+          // Update status to show retry in progress
+          setLoadingStatus(LOADING_CONFIG.statusMessages.retrying);
+          setLoadingProgress(40);
+          break;
 
-      console.log("Reconnecting...");
-      setLoadingTitle('Reconnecting Please Wait');
-      setLoadingSubtitle();
-      setLoadingStatus();
-      setLoadingProgress(0);
-      break;
+        case "connected":
+          // Reconnected — stream events (playStream, onVideoInitialized)
+          // will dismiss the loading overlay once the video is ready.
+          setLoadingTitle(LOADING_CONFIG.reconnectedTitle);
+          setLoadingSubtitle(LOADING_CONFIG.subtitle);
+          setLoadingStatus(LOADING_CONFIG.statusMessages.reconnected);
+          setLoadingProgress(70);
+          break;
 
-    case "retrying":
-      console.log("Retry attempt...");
-      break;
+        case "disconnected":
+          // Show disconnected state in loading overlay
+          setIsLoading(true);
+          setLoadingTitle('Disconnected');
+          setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
+          setLoadingStatus(LOADING_CONFIG.statusMessages.disconnected);
+          setLoadingProgress(0);
+          break;
 
-    case "connected":
-      console.log("Connected again!");
-      setLoadingTitle('Connected');
-      break;
-
-    case "disconnected":
-      console.log("Disconnected:", data.code);
-      break;
-
-    case "failed":
-      console.log("Reconnect failed!");
-      setLoadingTitle('Reconnecting failed');
-      setLoadingSubtitle();
-      setLoadingStatus();
-      setLoadingProgress(0);
-      break;
-  }
-});
+        case "failed":
+          // Reconnection exhausted — show failure state
+          setIsLoading(true);
+          setLoadingTitle(LOADING_CONFIG.reconnectFailedTitle);
+          setLoadingSubtitle(LOADING_CONFIG.reconnectFailedSubtitle);
+          setLoadingStatus(LOADING_CONFIG.statusMessages.reconnectFailed);
+          setLoadingProgress(0);
+          break;
+      }
+    });
 
     /* =====================================================================
        Hide the default Pixel Streaming UI overlay (top-left controls).
