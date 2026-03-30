@@ -133,6 +133,7 @@ const App = () => {
   const [queuePosition, setQueuePosition] = useState(null);
   const [loadingStatus, setLoadingStatus] = useState(LOADING_CONFIG.statusMessages.initializing);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [reconnecting, setReconnecting] = useState(true);
 
   // Controls state
   const [isMuted, setIsMuted] = useState(true);
@@ -251,6 +252,9 @@ const App = () => {
        Reconnection Lifecycle → Loading Screen Updates
        ===================================================================== */
     reconnectStream.on("state", (data) => {
+
+
+      
       switch (data.status) {
         case "connecting":
         case "reconnecting":
@@ -261,14 +265,16 @@ const App = () => {
           setLoadingSubtitle(LOADING_CONFIG.reconnectingSubtitle);
           setLoadingStatus(LOADING_CONFIG.statusMessages.reconnecting);
           setLoadingProgress(20);
+          setReconnecting(true);
           break;
-
+/*
         case "retrying":
           // Update status to show retry in progress
           setLoadingStatus(LOADING_CONFIG.statusMessages.retrying);
           setLoadingProgress(40);
+          
           break;
-
+*/
         case "connected":
           // Reconnected — stream events (playStream, onVideoInitialized)
           // will dismiss the loading overlay once the video is ready.
@@ -281,10 +287,12 @@ const App = () => {
         case "disconnected":
           // Show disconnected state in loading overlay
           setIsLoading(true);
+          if(!reconnecting){
           setLoadingTitle('Disconnected');
           setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
           setLoadingStatus(LOADING_CONFIG.statusMessages.disconnected);
           setLoadingProgress(0);
+          }
           break;
 
         case "failed":
@@ -349,11 +357,14 @@ const App = () => {
     });
 
     pixelStreaming.addEventListener('webRtcDisconnected', () => {
+
+      if(!reconnecting){
       setLoadingTitle('Disconnected');
       setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
       setLoadingStatus(LOADING_CONFIG.statusMessages.disconnected);
       setIsLoading(true);
       setLoadingProgress(0);
+      }
     });
 
     /* =====================================================================
