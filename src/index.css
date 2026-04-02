@@ -684,3 +684,106 @@ html, body {
 }
 
 
+/* =========================================================================
+   Developer Tools Panel
+   =========================================================================
+   Shown when SHOW_DEV_TOOLS is true in App.js. Provides controls for
+   console commands, textbox entry, connection, resolution, and more.
+   ========================================================================= */
+
+.dev-tools-popup {
+  position: fixed;
+  bottom: 76px;
+  right: 80px;
+  width: 340px;
+  max-height: 480px;
+  background: rgba(20, 20, 22, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  z-index: 10001;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.dev-tools-section {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dev-tools-section:last-child {
+  border-bottom: none;
+}
+
+.dev-tools-label {
+  display: block;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.dev-tools-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.dev-tools-row-wrap {
+  flex-wrap: wrap;
+}
+
+.dev-tools-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #fff;
+  padding: 6px 8px;
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+}
+
+.dev-tools-input:focus {
+  border-color: rgba(78, 156, 255, 0.5);
+}
+
+.dev-tools-btn {
+  background: rgba(78, 156, 255, 0.25);
+  border: 1px solid rgba(78, 156, 255, 0.3);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+
+.dev-tools-btn:hover {
+  background: rgba(78, 156, 255, 0.4);
+}
+
+.dev-tools-btn-danger {
+  background: rgba(255, 80, 80, 0.25);
+  border-color: rgba(255, 80, 80, 0.3);
+}
+
+.dev-tools-btn-danger:hover {
+  background: rgba(255, 80, 80, 0.4);
+}
+
+@media (max-width: 480px) {
+  .dev-tools-popup {
+    right: 12px;
+    bottom: 64px;
+    width: calc(100vw - 24px);
+  }
+}
+
+

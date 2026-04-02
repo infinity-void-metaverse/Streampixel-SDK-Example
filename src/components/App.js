@@ -6,6 +6,17 @@ let PixelStreamingUiApp;
 let UIControlApp;
 
 /* =========================================================================
+   FEATURE TOGGLES
+   =========================================================================
+   Set SHOW_DEV_TOOLS to true to display the Developer Tools panel
+   (console commands, textbox entry, connect/disconnect/reconnect,
+   resolution control, microphone, hovering mouse).
+   Set to false to hide it entirely in production.
+   ========================================================================= */
+const SHOW_DEV_TOOLS = true;
+
+
+/* =========================================================================
    CUSTOMIZATION: Loading Screen Configuration
    =========================================================================
    Modify these values to customize the loading screen that appears
@@ -146,6 +157,12 @@ const App = () => {
   const [afkCountdown, setAfkCountdown] = useState(0);
   const dismissAfkRef = useRef(null);
 
+  // Developer Tools state
+  const [showDevTools, setShowDevTools] = useState(false);
+  const [consoleCmd, setConsoleCmd] = useState('stat fps');
+  const [textboxText, setTextboxText] = useState('');
+  const [uiInteractionJson, setUiInteractionJson] = useState('{"type":"setColor","value":"red"}');
+
   const videoRef = useRef(null);
 
   const urlPart = window.location.href.split('/').pop();
@@ -222,13 +239,13 @@ const App = () => {
       // maxQP: -1,                  // Max quantization param (-1 = no limit)
 
       // ── Input ─────────────────────────────────────────────────────────
-      // mouseInput: true,           // Enable mouse input
-      // keyBoardInput: true,        // Enable keyboard input
-      // touchInput: true,           // Enable touch input
-      // gamepadInput: false,        // Enable gamepad/controller input
-      // hoverMouse: true,           // Send mouse hover/move events to UE
+      mouseInput: true,              // Enable mouse input
+      keyBoardInput: true,           // Enable keyboard input
+      touchInput: true,              // Enable touch input
+      hoverMouse: true,              // Send mouse hover/move events to UE
+      // gamepadInput: true,         // Uncomment to enable gamepad/controller input
+      // xrInput: true,              // Uncomment to enable WebXR (VR/AR) input
       // fakeMouseWithTouches: false, // Convert touch events to mouse events
-      // xrInput: false,             // Enable WebXR (VR/AR) input
 
       // ── Audio ─────────────────────────────────────────────────────────
       // useMic: true,               // Enable microphone input (sent to UE)
@@ -516,6 +533,66 @@ const App = () => {
   }, []);
 
 
+  // ── Developer Tools handlers ──────────────────────────────────────────
+
+  // Send a console command to UE (e.g., "stat fps", "stat unit", "r.SetRes 1920x1080f")
+  const handleConsoleCommand = useCallback((cmd) => {
+    if (PixelStreamingApp) {
+      PixelStreamingApp.emitConsoleCommand(cmd);
+    }
+  }, []);
+
+  // Send text as if typed into a focused UE text input field
+  const handleTextboxEntry = useCallback((text) => {
+    if (PixelStreamingApp) {
+      PixelStreamingApp.sendTextboxEntry(text);
+    }
+  }, []);
+
+  // Send a custom JSON payload to UE via UI Interaction
+  const handleSendToUE = useCallback((jsonStr) => {
+    if (PixelStreamingUiApp) {
+      try {
+        const descriptor = JSON.parse(jsonStr);
+        PixelStreamingUiApp.stream.emitUIInteraction(descriptor);
+      } catch (e) {
+        console.error('Invalid JSON:', e);
+      }
+    }
+  }, []);
+
+  // Manually disconnect the stream
+  const handleDisconnect = useCallback(() => {
+    if (PixelStreamingApp) {
+      PixelStreamingApp.disconnect();
+    }
+  }, []);
+
+  // Manually connect (when AutoConnect is false or after a disconnect)
+  const handleManualConnect = useCallback(() => {
+    if (PixelStreamingApp) {
+      PixelStreamingApp.connect();
+    }
+  }, []);
+
+  // Manually trigger a reconnection
+  const handleReconnect = useCallback(() => {
+    if (PixelStreamingApp) {
+      PixelStreamingApp.reconnect();
+    }
+  }, []);
+
+  // Enable microphone input (sends mic audio to UE)
+  const handleMicrophone = useCallback(async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      PixelStreamingApp.unmuteMicrophone(true);
+    } catch (err) {
+      console.error('Microphone access denied', err);
+    }
+  }, []);
+
+
   const renderStatValue = (label, value) => {
     if (value === undefined || value === null) return null;
     const displayValue = typeof value === 'number'
@@ -689,6 +766,20 @@ const App = () => {
             </svg>
           </button>
 
+          {/* Developer Tools (toggle via SHOW_DEV_TOOLS constant) */}
+          {SHOW_DEV_TOOLS && (
+            <button
+              className={`control-btn ${showDevTools ? 'control-btn-active' : ''}`}
+              onClick={() => setShowDevTools((prev) => !prev)}
+              title="Developer Tools"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="4 17 10 11 4 5" />
+                <line x1="12" y1="19" x2="20" y2="19" />
+              </svg>
+            </button>
+          )}
+
         </div>
       )}
 
@@ -707,6 +798,109 @@ const App = () => {
             ) : (
               <p className="stats-empty">Waiting for stream statistics...</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================
+          DEVELOPER TOOLS PANEL
+          ================================================================
+          Toggle visibility via the SHOW_DEV_TOOLS constant at the top
+          of this file. Set to false to hide in production.
+          ================================================================ */}
+      {SHOW_DEV_TOOLS && showDevTools && (
+        <div className="dev-tools-popup">
+          <div className="stats-popup-header">
+            <span className="stats-popup-title">Developer Tools</span>
+            <button className="stats-popup-close" onClick={() => setShowDevTools(false)}>&times;</button>
+          </div>
+          <div className="stats-popup-body">
+
+            {/* ── Send to UE ────────────────────────────────── */}
+            <div className="dev-tools-section">
+              <label className="dev-tools-label">Console Command</label>
+              <div className="dev-tools-row">
+                <input
+                  className="dev-tools-input"
+                  type="text"
+                  value={consoleCmd}
+                  onChange={(e) => setConsoleCmd(e.target.value)}
+                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') handleConsoleCommand(consoleCmd); }}
+                  placeholder="e.g. stat fps"
+                />
+                <button className="dev-tools-btn" onClick={() => handleConsoleCommand(consoleCmd)}>Send</button>
+              </div>
+            </div>
+
+            <div className="dev-tools-section">
+              <label className="dev-tools-label">Textbox Entry</label>
+              <div className="dev-tools-row">
+                <input
+                  className="dev-tools-input"
+                  type="text"
+                  value={textboxText}
+                  onChange={(e) => setTextboxText(e.target.value)}
+                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') handleTextboxEntry(textboxText); }}
+                  placeholder="Text to send to UE"
+                />
+                <button className="dev-tools-btn" onClick={() => handleTextboxEntry(textboxText)}>Send</button>
+              </div>
+            </div>
+
+            <div className="dev-tools-section">
+              <label className="dev-tools-label">UI Interaction (JSON)</label>
+              <div className="dev-tools-row">
+                <input
+                  className="dev-tools-input"
+                  type="text"
+                  value={uiInteractionJson}
+                  onChange={(e) => setUiInteractionJson(e.target.value)}
+                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') handleSendToUE(uiInteractionJson); }}
+                  placeholder='{"type":"action","value":"..."}'
+                />
+                <button className="dev-tools-btn" onClick={() => handleSendToUE(uiInteractionJson)}>Send</button>
+              </div>
+            </div>
+
+            {/* ── Connection ─────────────────────────────────── */}
+            <div className="dev-tools-section">
+              <label className="dev-tools-label">Connection</label>
+              <div className="dev-tools-row">
+                <button className="dev-tools-btn" onClick={handleManualConnect}>Connect</button>
+                <button className="dev-tools-btn" onClick={handleReconnect}>Reconnect</button>
+                <button className="dev-tools-btn dev-tools-btn-danger" onClick={handleDisconnect}>Disconnect</button>
+              </div>
+            </div>
+
+            {/* ── Audio ──────────────────────────────────────── */}
+            <div className="dev-tools-section">
+              <label className="dev-tools-label">Audio</label>
+              <div className="dev-tools-row">
+                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.toggleAudio()}>Toggle Audio</button>
+                <button className="dev-tools-btn" onClick={handleMicrophone}>Enable Mic</button>
+              </div>
+            </div>
+
+            {/* ── Resolution ─────────────────────────────────── */}
+            <div className="dev-tools-section">
+              <label className="dev-tools-label">Resolution</label>
+              <div className="dev-tools-row dev-tools-row-wrap">
+                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.handleResMax('854x480')}>480p</button>
+                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.handleResMax('1280x720')}>720p</button>
+                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.handleResMax('1920x1080')}>1080p</button>
+                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.handleResMax('2560x1440')}>1440p</button>
+              </div>
+            </div>
+
+            {/* ── Hovering Mouse ──────────────────────────────── */}
+            <div className="dev-tools-section">
+              <label className="dev-tools-label">Hovering Mouse</label>
+              <div className="dev-tools-row">
+                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.toggleHoveringMouse(true)}>Enable</button>
+                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.toggleHoveringMouse(false)}>Disable</button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}
