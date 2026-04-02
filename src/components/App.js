@@ -82,6 +82,7 @@ const App = () => {
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
   const [currentResolution, setCurrentResolution] = useState('Auto (Dashboard)');
+  const [resolutionEnabled, setResolutionEnabled] = useState(false);
 
   // AFK state
   const [afkWarning, setAfkWarning] = useState(false);
@@ -126,12 +127,12 @@ const App = () => {
       /* ─────────────────────────────────────────────────────────────────
          StreamPixelApplication() — Initialize the SDK.
 
-         The appId is your project ID from the StreamPixel dashboard.
+         The appId is your project ID from the Streampixel dashboard.
          It resolves all server-side config automatically (signaling URL,
          TURN credentials, UE instance pool, auth tokens).
 
          Everything else below is optional. If omitted, settings default
-         to your StreamPixel dashboard configuration.
+         to your Streampixel dashboard configuration.
          ───────────────────────────────────────────────────────────────── */
       const { appStream, pixelStreaming, queueHandler, UIControl, reconnectStream } = await StreamPixelApplication({
 
@@ -146,7 +147,7 @@ const App = () => {
         forceTurn: true,
 
         // ── The settings below are OPTIONAL overrides. ────────────────
-        // ── If omitted, they default to your StreamPixel dashboard. ───
+        // ── If omitted, they default to your Streampixel dashboard. ───
 
         // ── Codec (defaults from dashboard) ───────────────────────────
         // primaryCodec: "AV1",        // 'AV1' | 'H264' | 'VP9' | 'VP8'
@@ -165,6 +166,9 @@ const App = () => {
         // minQP: 20,
         // maxQP: -1,
 
+        // ── Resolution UI ────────────────────────────────────────────
+        // showResolution: true,        // Show resolution control to user
+
         // ── Input (defaults from dashboard) ───────────────────────────
         // mouseInput: true,
         // keyBoardInput: true,
@@ -174,8 +178,9 @@ const App = () => {
         // xrInput: true,
         // fakeMouseWithTouches: false,
 
-        // ── Audio (defaults from dashboard) ───────────────────────────
+        // ── Audio / Camera (defaults from dashboard) ────────────────────
         // useMic: true,
+        // useCamera: true,
 
         // ── AFK / Timeout (defaults from dashboard) ───────────────────
         // afktimeout: 120,
@@ -187,6 +192,10 @@ const App = () => {
       pixelStreamingRef.current = pixelStreaming;
       appStreamRef.current = appStream;
       uiControlRef.current = UIControl;
+
+      // Check if dashboard allows resolution control
+      const resOptions = UIControl.getResolution();
+      if (resOptions) setResolutionEnabled(true);
 
       /* ─── Reconnection Lifecycle ─────────────────────────────────── */
       reconnectStream.on('state', (data) => {
@@ -453,6 +462,15 @@ const App = () => {
     }
   }, []);
 
+  const handleCamera = useCallback(async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ video: true });
+      pixelStreamingRef.current?.unmuteCamera(true);
+    } catch (err) {
+      console.error('Camera access denied:', err.message);
+    }
+  }, []);
+
 
   /* =====================================================================
      Render
@@ -566,12 +584,14 @@ const App = () => {
             </svg>
           </button>
 
-          <button className={`control-btn ${showSettings ? 'control-btn-active' : ''}`} onClick={toggleSettings} title="Settings">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-          </button>
+          {resolutionEnabled && (
+            <button className={`control-btn ${showSettings ? 'control-btn-active' : ''}`} onClick={toggleSettings} title="Settings">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
+          )}
 
           {SHOW_DEV_TOOLS && (
             <button className={`control-btn ${showDevTools ? 'control-btn-active' : ''}`} onClick={() => setShowDevTools((prev) => !prev)} title="Developer Tools">
@@ -661,9 +681,10 @@ const App = () => {
               </div>
             </div>
             <div className="dev-tools-section">
-              <label className="dev-tools-label">Microphone</label>
+              <label className="dev-tools-label">Microphone & Camera</label>
               <div className="dev-tools-row">
                 <button className="dev-tools-btn" onClick={handleMicrophone}>Enable Mic</button>
+                <button className="dev-tools-btn" onClick={handleCamera}>Enable Camera</button>
               </div>
             </div>
 

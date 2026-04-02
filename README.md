@@ -1,6 +1,6 @@
-# StreamPixel Web SDK — Example Application
+# Streampixel Web SDK — Example Application
 
-A React example demonstrating how to integrate the **StreamPixel Web SDK** to stream Unreal Engine content directly into a browser via WebRTC. This repo serves as both a working starter and a complete feature reference.
+A React example demonstrating how to integrate the **Streampixel Web SDK** to stream Unreal Engine content directly into a browser via WebRTC. This repo serves as both a working starter and a complete feature reference.
 
 ---
 
@@ -44,7 +44,7 @@ npm install
 npm start
 ```
 
-Open `http://localhost:3000/<YOUR_PROJECT_ID>` — replace with your StreamPixel project ID from the dashboard.
+Open `http://localhost:3000/<YOUR_PROJECT_ID>` — replace with your Streampixel project ID from the dashboard.
 
 ---
 
@@ -112,7 +112,7 @@ import { StreamPixelApplication } from 'streampixelsdk';
 
 const { appStream, pixelStreaming, queueHandler, UIControl, reconnectStream } =
   await StreamPixelApplication({
-    appId: "your_project_id",   // Required — from StreamPixel dashboard
+    appId: "your_project_id",   // Required — from Streampixel dashboard
     AutoConnect: true,
   });
 ```
@@ -132,7 +132,7 @@ You don't need to configure signaling URLs, TURN servers, ICE configs, or auth t
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| **`appId`** | `string` | **Required** | Project ID from StreamPixel dashboard |
+| **`appId`** | `string` | **Required** | Project ID from Streampixel dashboard |
 | `AutoConnect` | `boolean` | `true` | Connect immediately on initialization |
 | `streamerId` | `string` | Auto-generated | Target a specific streamer instance |
 | `sfuHost` | `string` | `"false"` | SFU host mode (`"true"` / `"false"`) |
@@ -162,6 +162,8 @@ You don't need to configure signaling URLs, TURN servers, ICE configs, or auth t
 | `hoverMouse` | `boolean` | From project | Send mouse hover/move events to UE |
 | `fakeMouseWithTouches` | `boolean` | From project | Convert touch events to mouse events |
 | `useMic` | `boolean` | From project | Enable microphone input (sent to UE) |
+| `useCamera` | `boolean` | From project | Enable webcam input (sent to UE) |
+| `showResolution` | `boolean` | From project | Show resolution control to the user |
 | `afktimeout` | `number` | From project | Idle timeout in seconds (1–7200) |
 
 ### Return Values
@@ -373,7 +375,7 @@ StreamPixelApplication({
 
 ## Input Controls
 
-All input settings default to your **StreamPixel dashboard** configuration. Only pass these if you need to override them on the client side:
+All input settings default to your **Streampixel dashboard** configuration. Only pass these if you need to override them on the client side:
 
 ```js
 StreamPixelApplication({
@@ -911,7 +913,7 @@ The SDK re-exports these classes from Epic Games' Pixel Streaming libraries for 
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
-| Black screen, no video | Incorrect project ID or UE not running | Verify `appId` and check StreamPixel dashboard |
+| Black screen, no video | Incorrect project ID or UE not running | Verify `appId` and check Streampixel dashboard |
 | Audio not working | Separate `<audio>` element not unmuted | Mute both video + audio elements (see [Audio](#audio)) |
 | Stats show `[object Object]` | Raw AggregatedStats has nested objects | Use `extractPSStats()` to flatten them |
 | Default PS UI showing | `#uiFeatures` not hidden | Add CSS rule `#uiFeatures { display: none !important; }` |
@@ -924,4 +926,4 @@ The SDK re-exports these classes from Epic Games' Pixel Streaming libraries for 
 
 ## License
 
-This example is provided for integration reference. The StreamPixel Web SDK is proprietary — see your StreamPixel license agreement for terms.
+This example is provided for integration reference. The Streampixel Web SDK is proprietary — see your Streampixel license agreement for terms.
