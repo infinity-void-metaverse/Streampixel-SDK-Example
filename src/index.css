@@ -210,25 +210,8 @@ video {
 
 
 /* =========================================================================
-   Stats Popup
+   Popup Shared Styles (used by settings, dev tools)
    ========================================================================= */
-
-.stats-popup {
-  position: fixed;
-  bottom: 76px;
-  right: 20px;
-  width: 280px;
-  max-height: 400px;
-  background: rgba(20, 20, 22, 0.92);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  z-index: 10001;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-}
 
 .stats-popup-header {
   display: flex;
@@ -262,36 +245,6 @@ video {
   padding: 12px 16px;
   overflow-y: auto;
   flex: 1;
-}
-
-.stats-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.stats-row:last-child {
-  border-bottom: none;
-}
-
-.stats-label {
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 12px;
-}
-
-.stats-value {
-  color: #fff;
-  font-size: 12px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.stats-empty {
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 13px;
-  text-align: center;
-  margin: 16px 0;
 }
 
 
@@ -371,6 +324,56 @@ video {
 .afk-btn:hover {
   opacity: 0.9;
   transform: scale(1.03);
+}
+
+
+/* =========================================================================
+   Settings Popup (Resolution / Quality)
+   ========================================================================= */
+
+.settings-popup {
+  position: fixed;
+  bottom: 76px;
+  right: 20px;
+  width: 200px;
+  background: rgba(20, 20, 22, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  z-index: 10001;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.settings-popup-body {
+  padding: 4px 0;
+}
+
+.settings-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.settings-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-option-active {
+  color: #fff;
+  font-weight: 600;
+}
+
+.settings-option-active svg {
+  color: #4e9cff;
 }
 
 
@@ -482,7 +485,7 @@ video {
     height: 40px;
   }
 
-  .stats-popup,
+  .settings-popup,
   .dev-tools-popup {
     right: 12px;
     bottom: 64px;

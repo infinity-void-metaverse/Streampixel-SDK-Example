@@ -52,50 +52,6 @@ const LOADING_CONFIG = {
 };
 
 
-/* =========================================================================
-   Helper: Extract stats from AggregatedStats (same fields as the
-   default Pixel Streaming stats panel).
-   ========================================================================= */
-function extractPSStats(stats) {
-  if (!stats || typeof stats !== 'object') return null;
-
-  const result = {};
-  const add = (label, val) => {
-    if (val !== undefined && val !== null && val !== '') result[label] = val;
-  };
-
-  const iv = stats.inboundVideoStats || {};
-  const ia = stats.inboundAudioStats || {};
-  const ss = stats.sessionStats || {};
-  const st = stats.streamStats || {};
-  const codecs = stats.codecs;
-
-  const resolveCodec = (codecId, prefix) => {
-    if (!codecId || !codecs) return undefined;
-    const entry = codecs.get ? codecs.get(codecId) : codecs[codecId];
-    return entry?.mimeType?.replace(prefix, '');
-  };
-
-  add('Video Bitrate (kbps)',  iv.bitrate);
-  add('Audio Bitrate (kbps)',  ia.bitrate);
-  add('Video Resolution',      iv.frameWidth && iv.frameHeight ? `${iv.frameWidth}x${iv.frameHeight}` : undefined);
-  add('Framerate',             iv.framesPerSecond || iv.framerate);
-  add('Frames Decoded',        iv.framesDecoded);
-  add('Frames Dropped',        iv.framesDropped);
-  add('Packets Lost',          iv.packetsLost);
-  add('Video Codec',           resolveCodec(iv.codecId, 'video/'));
-  add('Audio Codec',           resolveCodec(ia.codecId, 'audio/'));
-  add('Net RTT (ms)',          ss.currentRoundTripTime !== undefined ? (ss.currentRoundTripTime * 1000) : undefined);
-  add('Received (bytes)',      st.bytesReceived || iv.bytesReceived);
-  add('Duration',              ss.duration);
-  add('Video QP',              iv.qpSum);
-  add('Decode Time (ms)',      iv.totalDecodeTime !== undefined && iv.framesDecoded ? ((iv.totalDecodeTime / iv.framesDecoded) * 1000) : undefined);
-  add('Jitter Buffer (ms)',    iv.jitterBufferDelay !== undefined && iv.jitterBufferEmittedCount ? ((iv.jitterBufferDelay / iv.jitterBufferEmittedCount) * 1000) : undefined);
-
-  return Object.keys(result).length > 0 ? result : null;
-}
-
-
 const App = () => {
   // SDK refs (stable across renders, not React state)
   const pixelStreamingRef = useRef(null);
@@ -120,8 +76,10 @@ const App = () => {
   // Controls state
   const [isMuted, setIsMuted] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showStats, setShowStats] = useState(false);
-  const [statsData, setStatsData] = useState(null);
+
+  // Settings state
+  const [showSettings, setShowSettings] = useState(false);
+  const [currentResolution, setCurrentResolution] = useState('Auto');
 
   // AFK state
   const [afkWarning, setAfkWarning] = useState(false);
@@ -325,14 +283,6 @@ const App = () => {
         }
       });
 
-      /* ─── Stats ──────────────────────────────────────────────────── */
-      pixelStreaming.addEventListener('statsReceived', (e) => {
-        if (e.data?.aggregatedStats) {
-          const ps = extractPSStats(e.data.aggregatedStats);
-          if (ps) setStatsData(ps);
-        }
-      });
-
       /* ─── AFK Warning ───────────────────────────────────────────── */
       pixelStreaming.addEventListener('afkWarningActivate', (e) => {
         setAfkWarning(true);
@@ -447,7 +397,27 @@ const App = () => {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
-  const toggleStats = useCallback(() => setShowStats((prev) => !prev), []);
+  const toggleStats = useCallback(() => {
+    uiControlRef.current?.getStreamStats();
+  }, []);
+  const toggleSettings = useCallback(() => setShowSettings((prev) => !prev), []);
+
+  const RESOLUTION_OPTIONS = [
+    { label: 'Auto', value: null },
+    { label: '480p', value: '854x480' },
+    { label: '720p', value: '1280x720' },
+    { label: '1080p', value: '1920x1080' },
+    { label: '1440p', value: '2560x1440' },
+    { label: '4K', value: '3840x2160' },
+  ];
+
+  const handleResolutionChange = useCallback((option) => {
+    if (option.value) {
+      uiControlRef.current?.handleResMax(option.value);
+    }
+    setCurrentResolution(option.label);
+    setShowSettings(false);
+  }, []);
 
   /* ─── Developer Tools Handlers ───────────────────────────────────── */
 
@@ -476,24 +446,6 @@ const App = () => {
       console.error('Microphone access denied:', err.message);
     }
   }, []);
-
-
-  /* =====================================================================
-     Render Helpers
-     ===================================================================== */
-
-  const renderStatValue = (label, value) => {
-    if (value === undefined || value === null) return null;
-    const displayValue = typeof value === 'number'
-      ? (Number.isInteger(value) ? value.toLocaleString() : value.toFixed(2))
-      : String(value);
-    return (
-      <div className="stats-row" key={label}>
-        <span className="stats-label">{label}</span>
-        <span className="stats-value">{displayValue}</span>
-      </div>
-    );
-  };
 
 
   /* =====================================================================
@@ -600,11 +552,18 @@ const App = () => {
             )}
           </button>
 
-          <button className={`control-btn ${showStats ? 'control-btn-active' : ''}`} onClick={toggleStats} title="Stream Info">
+          <button className="control-btn" onClick={toggleStats} title="Stream Info">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="16" x2="12" y2="12" />
               <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+          </button>
+
+          <button className={`control-btn ${showSettings ? 'control-btn-active' : ''}`} onClick={toggleSettings} title="Settings">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </button>
 
@@ -619,19 +578,28 @@ const App = () => {
         </div>
       )}
 
-      {/* Stats Popup */}
-      {showStats && (
-        <div className="stats-popup">
+      {/* Settings Popup (Resolution) */}
+      {showSettings && (
+        <div className="settings-popup">
           <div className="stats-popup-header">
-            <span className="stats-popup-title">Stream Info</span>
-            <button className="stats-popup-close" onClick={() => setShowStats(false)}>&times;</button>
+            <span className="stats-popup-title">Quality</span>
+            <button className="stats-popup-close" onClick={() => setShowSettings(false)}>&times;</button>
           </div>
-          <div className="stats-popup-body">
-            {statsData && Object.keys(statsData).length > 0 ? (
-              Object.entries(statsData).map(([key, val]) => renderStatValue(key, val))
-            ) : (
-              <p className="stats-empty">Waiting for stream statistics...</p>
-            )}
+          <div className="settings-popup-body">
+            {RESOLUTION_OPTIONS.map((option) => (
+              <button
+                key={option.label}
+                className={`settings-option ${currentResolution === option.label ? 'settings-option-active' : ''}`}
+                onClick={() => handleResolutionChange(option)}
+              >
+                <span>{option.label}</span>
+                {currentResolution === option.label && (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -671,15 +639,7 @@ const App = () => {
                 <button className="dev-tools-btn" onClick={handleMicrophone}>Enable Mic</button>
               </div>
             </div>
-            <div className="dev-tools-section">
-              <label className="dev-tools-label">Resolution</label>
-              <div className="dev-tools-row dev-tools-row-wrap">
-                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.handleResMax('854x480')}>480p</button>
-                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.handleResMax('1280x720')}>720p</button>
-                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.handleResMax('1920x1080')}>1080p</button>
-                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.handleResMax('2560x1440')}>1440p</button>
-              </div>
-            </div>
+
             <div className="dev-tools-section">
               <label className="dev-tools-label">Hovering Mouse</label>
               <div className="dev-tools-row">
