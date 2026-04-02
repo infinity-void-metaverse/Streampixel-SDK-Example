@@ -821,9 +821,8 @@ When `SHOW_DEV_TOOLS` is `false`, both the toggle button and the panel are compl
 | Section | What It Does | SDK Method |
 |---------|-------------|------------|
 | Console Command | Send UE console commands (e.g., `stat fps`) | `pixelStreaming.emitConsoleCommand()` |
-| Textbox Entry | Send text to focused UE text field | `pixelStreaming.sendTextboxEntry()` |
 | UI Interaction | Send custom JSON to UE Blueprint/C++ | `appStream.stream.emitUIInteraction()` |
-| Connection | Connect / Reconnect / Disconnect | `pixelStreaming.connect()` / `.reconnect()` / `.disconnect()` |
+| Connection | Disconnect the stream | `pixelStreaming.disconnect()` |
 | Audio | Toggle stream audio, enable microphone | `UIControl.toggleAudio()`, `pixelStreaming.unmuteMicrophone()` |
 | Resolution | Switch between 480p / 720p / 1080p / 1440p | `UIControl.handleResMax()` |
 | Hovering Mouse | Enable/disable mouse hover events | `UIControl.toggleHoveringMouse()` |

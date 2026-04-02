@@ -160,7 +160,6 @@ const App = () => {
   // Developer Tools state
   const [showDevTools, setShowDevTools] = useState(false);
   const [consoleCmd, setConsoleCmd] = useState('stat fps');
-  const [textboxText, setTextboxText] = useState('');
   const [uiInteractionJson, setUiInteractionJson] = useState('{"type":"setColor","value":"red"}');
 
   const videoRef = useRef(null);
@@ -196,10 +195,12 @@ const App = () => {
        need the appId on the client side.
 
        Everything else below is optional client-side overrides.
+       If you leave a setting commented out, it will automatically
+       use the value configured in your StreamPixel dashboard.
        ===================================================================== */
     const { appStream, pixelStreaming, queueHandler,UIControl,reconnectStream } = await StreamPixelApplication({
 
-      
+
       // ── Required ──────────────────────────────────────────────────────
       appId: projectId,              // Project ID (from URL or hardcoded)
 
@@ -209,17 +210,19 @@ const App = () => {
       sfuHost: sfuHost,              // SFU host mode: "true" | "false" (default: "false")
       sfuPlayer: sfuPlayer,          // SFU viewer mode: "true" | "false" (default: "false")
       forceTurn: true,               // Force TURN relay (helps behind strict firewalls)
-      // region: "Asia-pacific",     // Auto-detected from appId; no need to set manually
+
+      // ── The settings below are OPTIONAL overrides. ────────────────────
+      // ── If omitted, they default to your StreamPixel dashboard config. ─
 
       // ── Video Playback ────────────────────────────────────────────────
       // AutoPlayVideo: true,        // Auto-play video on load
       // StartVideoMuted: true,      // Start with video audio muted
 
-      // ── Codec ─────────────────────────────────────────────────────────
+      // ── Codec (defaults from dashboard) ───────────────────────────────
       // primaryCodec: "AV1",        // Preferred codec: 'AV1' | 'H264' | 'VP9' | 'VP8'
       // fallBackCodec: "H264",      // Fallback if primary not supported by browser
 
-      // ── Resolution ────────────────────────────────────────────────────
+      // ── Resolution (defaults from dashboard) ──────────────────────────
       // maxStreamQuality: '720p (1280x720)',
       //   Options: "360p (640x360)" | "480p (854x480)" | "720p (1280x720)"
       //          | "1080p (1920x1080)" | "1440p (2560x1440)" | "4K (3840x2160)"
@@ -232,25 +235,25 @@ const App = () => {
       // resY: 1080,                 // Custom resolution height (pixels)
       // resolution: true,           // Enable resolution control
 
-      // ── Bitrate / Quality ─────────────────────────────────────────────
+      // ── Bitrate / Quality (defaults from dashboard) ───────────────────
       // minBitrate: 1,              // Minimum bitrate (Mbps)
       // maxBitrate: 100,            // Maximum bitrate (Mbps)
       // minQP: 20,                  // Min quantization param (1-51, lower = better quality)
       // maxQP: -1,                  // Max quantization param (-1 = no limit)
 
-      // ── Input ─────────────────────────────────────────────────────────
-      mouseInput: true,              // Enable mouse input
-      keyBoardInput: true,           // Enable keyboard input
-      touchInput: true,              // Enable touch input
-      hoverMouse: true,              // Send mouse hover/move events to UE
-      // gamepadInput: true,         // Uncomment to enable gamepad/controller input
-      // xrInput: true,              // Uncomment to enable WebXR (VR/AR) input
+      // ── Input (defaults from dashboard) ───────────────────────────────
+      // mouseInput: true,           // Enable mouse input
+      // keyBoardInput: true,        // Enable keyboard input
+      // touchInput: true,           // Enable touch input
+      // hoverMouse: true,           // Send mouse hover/move events to UE
+      // gamepadInput: true,         // Enable gamepad/controller input
+      // xrInput: true,              // Enable WebXR (VR/AR) input
       // fakeMouseWithTouches: false, // Convert touch events to mouse events
 
-      // ── Audio ─────────────────────────────────────────────────────────
+      // ── Audio (defaults from dashboard) ───────────────────────────────
       // useMic: true,               // Enable microphone input (sent to UE)
 
-      // ── AFK / Timeout ─────────────────────────────────────────────────
+      // ── AFK / Timeout (defaults from dashboard) ───────────────────────
       // afktimeout: 120,            // Idle timeout in seconds (min: 1, max: 7200)
     });
 
@@ -542,13 +545,6 @@ const App = () => {
     }
   }, []);
 
-  // Send text as if typed into a focused UE text input field
-  const handleTextboxEntry = useCallback((text) => {
-    if (PixelStreamingApp) {
-      PixelStreamingApp.sendTextboxEntry(text);
-    }
-  }, []);
-
   // Send a custom JSON payload to UE via UI Interaction
   const handleSendToUE = useCallback((jsonStr) => {
     if (PixelStreamingUiApp) {
@@ -565,20 +561,6 @@ const App = () => {
   const handleDisconnect = useCallback(() => {
     if (PixelStreamingApp) {
       PixelStreamingApp.disconnect();
-    }
-  }, []);
-
-  // Manually connect (when AutoConnect is false or after a disconnect)
-  const handleManualConnect = useCallback(() => {
-    if (PixelStreamingApp) {
-      PixelStreamingApp.connect();
-    }
-  }, []);
-
-  // Manually trigger a reconnection
-  const handleReconnect = useCallback(() => {
-    if (PixelStreamingApp) {
-      PixelStreamingApp.reconnect();
     }
   }, []);
 
@@ -666,7 +648,7 @@ const App = () => {
         ref={videoRef}
         style={{
           backgroundSize: "cover",
-          height: "100vh",
+          height: "100dvh",
           position: "relative"
         }}
       />
@@ -833,21 +815,6 @@ const App = () => {
             </div>
 
             <div className="dev-tools-section">
-              <label className="dev-tools-label">Textbox Entry</label>
-              <div className="dev-tools-row">
-                <input
-                  className="dev-tools-input"
-                  type="text"
-                  value={textboxText}
-                  onChange={(e) => setTextboxText(e.target.value)}
-                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') handleTextboxEntry(textboxText); }}
-                  placeholder="Text to send to UE"
-                />
-                <button className="dev-tools-btn" onClick={() => handleTextboxEntry(textboxText)}>Send</button>
-              </div>
-            </div>
-
-            <div className="dev-tools-section">
               <label className="dev-tools-label">UI Interaction (JSON)</label>
               <div className="dev-tools-row">
                 <input
@@ -866,8 +833,6 @@ const App = () => {
             <div className="dev-tools-section">
               <label className="dev-tools-label">Connection</label>
               <div className="dev-tools-row">
-                <button className="dev-tools-btn" onClick={handleManualConnect}>Connect</button>
-                <button className="dev-tools-btn" onClick={handleReconnect}>Reconnect</button>
                 <button className="dev-tools-btn dev-tools-btn-danger" onClick={handleDisconnect}>Disconnect</button>
               </div>
             </div>

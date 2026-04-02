@@ -71,7 +71,7 @@ video {
   flex: 1;
   flex-direction: column;
   height: 100%;
-  height: -webkit-fill-available;
+  height: 100dvh;
   justify-content: center;
   position: fixed;
   width: 100%;
@@ -195,6 +195,7 @@ video {
 
 html, body {
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
   touch-action: none;
   overscroll-behavior: none;
@@ -330,6 +331,7 @@ html, body {
   left: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -458,8 +460,8 @@ html, body {
 
 .stream-controls {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  right: calc(20px + env(safe-area-inset-right, 0px));
   z-index: 10000;
   display: flex;
   gap: 10px;
@@ -611,6 +613,7 @@ html, body {
   left: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(8px);
   z-index: 99999;
