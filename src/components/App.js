@@ -1,16 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { StreamPixelApplication } from 'streampixelsdk';
 
-let PixelStreamingApp;
-let PixelStreamingUiApp;
-let UIControlApp;
-
 /* =========================================================================
    FEATURE TOGGLES
    =========================================================================
    Set SHOW_DEV_TOOLS to true to display the Developer Tools panel
-   (console commands, textbox entry, connect/disconnect/reconnect,
-   resolution control, microphone, hovering mouse).
+   (console commands, UI interaction, disconnect, resolution, mic, etc.).
    Set to false to hide it entirely in production.
    ========================================================================= */
 const SHOW_DEV_TOOLS = true;
@@ -22,35 +17,16 @@ const SHOW_DEV_TOOLS = true;
    Modify these values to customize the loading screen that appears
    while the stream is connecting.
    ========================================================================= */
-
 const LOADING_CONFIG = {
-  // Loading screen background color
   backgroundColor: '#18181A',
-
-  // Primary accent color (used for spinner, progress bar, buttons)
   accentColor: '#4e9cff',
-
-  // Your logo URL (set to null to hide the logo)
-  logoUrl: null, // e.g. '/Images/logoNew.png'
-
-  // Loading title text
+  logoUrl: null, // e.g. '/Images/logo.png'
   title: 'Connecting to Stream',
-
-  // Loading subtitle / description text
-  // Subtitle shown during connection (hidden on disconnect/failure)
   subtitle: 'Please wait while we set up your experience...',
-
-  // Subtitle shown on disconnect / failure states
   disconnectedSubtitle: 'The stream session has ended.',
-
-  // Text shown when the user is placed in a queue
   queueMessage: (position) => `You are in queue at position ${position}`,
-
-  // Show a spinner animation
   showSpinner: true,
 
-  // Status messages mapped to WebRTC lifecycle events
-  // Customize these to change what users see at each connection stage
   statusMessages: {
     initializing:    'Initializing...',
     connecting:      'Connecting to server...',
@@ -62,26 +38,23 @@ const LOADING_CONFIG = {
     inQueue:         'Waiting in queue...',
     failed:          'Connection failed. Please try again.',
     disconnected:    'Disconnected from stream.',
-
-    // Reconnection status messages
     reconnecting:    'Reconnecting to stream...',
     retrying:        'Retrying connection...',
     reconnected:     'Reconnected! Loading stream...',
     reconnectFailed: 'Unable to reconnect. Please refresh the page.',
   },
 
-  // Reconnection screen titles & subtitles
-  reconnectingTitle:    'Reconnecting',
-  reconnectingSubtitle: 'Please wait while we restore your session...',
-  reconnectedTitle:     'Reconnected',
-  reconnectFailedTitle: 'Reconnection Failed',
+  reconnectingTitle:       'Reconnecting',
+  reconnectingSubtitle:    'Please wait while we restore your session...',
+  reconnectedTitle:        'Reconnected',
+  reconnectFailedTitle:    'Reconnection Failed',
   reconnectFailedSubtitle: 'We were unable to restore your session.',
 };
 
 
 /* =========================================================================
-   Helper: Extract Pixel Streaming stats (same fields as the default
-   PS stats panel) from the AggregatedStats object.
+   Helper: Extract stats from AggregatedStats (same fields as the
+   default Pixel Streaming stats panel).
    ========================================================================= */
 function extractPSStats(stats) {
   if (!stats || typeof stats !== 'object') return null;
@@ -91,24 +64,18 @@ function extractPSStats(stats) {
     if (val !== undefined && val !== null && val !== '') result[label] = val;
   };
 
-  // Shorthand references to nested stat objects
   const iv = stats.inboundVideoStats || {};
   const ia = stats.inboundAudioStats || {};
   const ss = stats.sessionStats || {};
   const st = stats.streamStats || {};
-  const codecs = stats.codecs; // Map<codecId, { mimeType, ... }>
+  const codecs = stats.codecs;
 
-  // Resolve codec name from the codecs Map (same logic as default PS stats panel).
-  // The codecId is something like "RTCCodec_0_Inbound_96"; the Map entry has
-  // a mimeType like "video/AV1" — we strip the "video/" or "audio/" prefix.
   const resolveCodec = (codecId, prefix) => {
     if (!codecId || !codecs) return undefined;
     const entry = codecs.get ? codecs.get(codecId) : codecs[codecId];
-    if (entry && entry.mimeType) return entry.mimeType.replace(prefix, '');
-    return undefined;
+    return entry?.mimeType?.replace(prefix, '');
   };
 
-  // Session stats (same fields as the default Pixel Streaming stats panel)
   add('Video Bitrate (kbps)',  iv.bitrate);
   add('Audio Bitrate (kbps)',  ia.bitrate);
   add('Video Resolution',      iv.frameWidth && iv.frameHeight ? `${iv.frameWidth}x${iv.frameHeight}` : undefined);
@@ -122,8 +89,6 @@ function extractPSStats(stats) {
   add('Received (bytes)',      st.bytesReceived || iv.bytesReceived);
   add('Duration',              ss.duration);
   add('Video QP',              iv.qpSum);
-
-  // Latency stats
   add('Decode Time (ms)',      iv.totalDecodeTime !== undefined && iv.framesDecoded ? ((iv.totalDecodeTime / iv.framesDecoded) * 1000) : undefined);
   add('Jitter Buffer (ms)',    iv.jitterBufferDelay !== undefined && iv.jitterBufferEmittedCount ? ((iv.jitterBufferDelay / iv.jitterBufferEmittedCount) * 1000) : undefined);
 
@@ -132,10 +97,16 @@ function extractPSStats(stats) {
 
 
 const App = () => {
-  const [projectId, setProjectId] = useState();
-  const [sfuHost, setSfuHost] = useState("False");
-  const [sfuPlayer, setSfuPlayer] = useState("False");
-  const [streamerId, setStreamerId] = useState();
+  // SDK refs (stable across renders, not React state)
+  const pixelStreamingRef = useRef(null);
+  const appStreamRef = useRef(null);
+  const uiControlRef = useRef(null);
+
+  // URL-derived config
+  const [projectId, setProjectId] = useState(null);
+  const [sfuHost, setSfuHost] = useState('false');
+  const [sfuPlayer, setSfuPlayer] = useState('false');
+  const [streamerId, setStreamerId] = useState(undefined);
 
   // Loading state
   const [isLoading, setIsLoading] = useState(true);
@@ -144,7 +115,7 @@ const App = () => {
   const [queuePosition, setQueuePosition] = useState(null);
   const [loadingStatus, setLoadingStatus] = useState(LOADING_CONFIG.statusMessages.initializing);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [reconnecting, setReconnecting] = useState(true);
+  const isReconnecting = useRef(false);
 
   // Controls state
   const [isMuted, setIsMuted] = useState(true);
@@ -164,362 +135,309 @@ const App = () => {
 
   const videoRef = useRef(null);
 
-  const urlPart = window.location.href.split('/').pop();
-
+  /* =====================================================================
+     Parse project ID and query params from URL
+     ===================================================================== */
   useEffect(() => {
-    if (urlPart) {
-      const urlSearchParams = new URLSearchParams(window.location.search);
-      const baseId = urlPart.split('?')[0];
-      setProjectId(baseId);
+    const urlPart = window.location.href.split('/').pop();
+    if (!urlPart) return;
 
-      for (const [key, value] of urlSearchParams.entries()) {
-        if (key === 'streamerId') setStreamerId(value);
-        if (key === 'sfuHost') setSfuHost(value);
-        if (key === 'sfuPlayer') setSfuPlayer(value);
-      }
-    }
-  }, [urlPart]);
+    const baseId = urlPart.split('?')[0];
+    setProjectId(baseId);
 
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('streamerId')) setStreamerId(params.get('streamerId'));
+    if (params.has('sfuHost')) setSfuHost(params.get('sfuHost'));
+    if (params.has('sfuPlayer')) setSfuPlayer(params.get('sfuPlayer'));
+  }, []);
 
-  const startPlay = async () => {
-    setLoadingStatus(LOADING_CONFIG.statusMessages.connecting);
-    setLoadingProgress(10);
+  /* =====================================================================
+     Initialize SDK when projectId is ready
+     ===================================================================== */
+  useEffect(() => {
+    if (!projectId) return;
 
-    /* =====================================================================
-       StreamPixelApplication() — Initialize the SDK.
+    let mounted = true;
 
-       The `appId` is your project ID from the StreamPixel dashboard.
-       It tells the SDK which signaling server, TURN credentials, and
-       UE instance pool to use. All server-side config (URLs, auth,
-       instance allocation) is managed by the dashboard — you only
-       need the appId on the client side.
+    const startPlay = async () => {
+      setLoadingStatus(LOADING_CONFIG.statusMessages.connecting);
+      setLoadingProgress(10);
 
-       Everything else below is optional client-side overrides.
-       If you leave a setting commented out, it will automatically
-       use the value configured in your StreamPixel dashboard.
-       ===================================================================== */
-    const { appStream, pixelStreaming, queueHandler,UIControl,reconnectStream } = await StreamPixelApplication({
+      /* ─────────────────────────────────────────────────────────────────
+         StreamPixelApplication() — Initialize the SDK.
 
+         The appId is your project ID from the StreamPixel dashboard.
+         It resolves all server-side config automatically (signaling URL,
+         TURN credentials, UE instance pool, auth tokens).
 
-      // ── Required ──────────────────────────────────────────────────────
-      appId: projectId,              // Project ID (from URL or hardcoded)
+         Everything else below is optional. If omitted, settings default
+         to your StreamPixel dashboard configuration.
+         ───────────────────────────────────────────────────────────────── */
+      const { appStream, pixelStreaming, queueHandler, UIControl, reconnectStream } = await StreamPixelApplication({
 
-      // ── Connection ────────────────────────────────────────────────────
-      AutoConnect: true,             // Connect immediately on init
-      streamerId: streamerId,        // Target a specific streamer instance (optional)
-      sfuHost: sfuHost,              // SFU host mode: "true" | "false" (default: "false")
-      sfuPlayer: sfuPlayer,          // SFU viewer mode: "true" | "false" (default: "false")
-      forceTurn: true,               // Force TURN relay (helps behind strict firewalls)
+        // ── Required ──────────────────────────────────────────────────
+        appId: projectId,
 
-      // ── The settings below are OPTIONAL overrides. ────────────────────
-      // ── If omitted, they default to your StreamPixel dashboard config. ─
+        // ── Connection ────────────────────────────────────────────────
+        AutoConnect: true,
+        streamerId,
+        sfuHost,
+        sfuPlayer,
+        forceTurn: true,
 
-      // ── Video Playback ────────────────────────────────────────────────
-      // AutoPlayVideo: true,        // Auto-play video on load
-      // StartVideoMuted: true,      // Start with video audio muted
+        // ── The settings below are OPTIONAL overrides. ────────────────
+        // ── If omitted, they default to your StreamPixel dashboard. ───
 
-      // ── Codec (defaults from dashboard) ───────────────────────────────
-      // primaryCodec: "AV1",        // Preferred codec: 'AV1' | 'H264' | 'VP9' | 'VP8'
-      // fallBackCodec: "H264",      // Fallback if primary not supported by browser
+        // ── Codec (defaults from dashboard) ───────────────────────────
+        // primaryCodec: "AV1",        // 'AV1' | 'H264' | 'VP9' | 'VP8'
+        // fallBackCodec: "H264",
 
-      // ── Resolution (defaults from dashboard) ──────────────────────────
-      // maxStreamQuality: '720p (1280x720)',
-      //   Options: "360p (640x360)" | "480p (854x480)" | "720p (1280x720)"
-      //          | "1080p (1920x1080)" | "1440p (2560x1440)" | "4K (3840x2160)"
-      // startResolution: "720p (1280x720)",        // Desktop initial resolution
-      // startResolutionMobile: "480p (854x480)",   // Mobile initial resolution
-      // startResolutionTab: "1080p (1920x1080)",   // Tablet initial resolution
-      // resolutionMode: "Fixed Resolution Mode",
-      //   Options: "Fixed Resolution Mode" | "Crop on Resize Mode" | "Dynamic Resolution Mode"
-      // resX: 1920,                 // Custom resolution width (pixels)
-      // resY: 1080,                 // Custom resolution height (pixels)
-      // resolution: true,           // Enable resolution control
+        // ── Resolution (defaults from dashboard) ──────────────────────
+        // maxStreamQuality: '1080p (1920x1080)',
+        // startResolution: "1080p (1920x1080)",
+        // startResolutionMobile: "480p (854x480)",
+        // startResolutionTab: "720p (1280x720)",
+        // resolutionMode: "Fixed Resolution Mode",
 
-      // ── Bitrate / Quality (defaults from dashboard) ───────────────────
-      // minBitrate: 1,              // Minimum bitrate (Mbps)
-      // maxBitrate: 100,            // Maximum bitrate (Mbps)
-      // minQP: 20,                  // Min quantization param (1-51, lower = better quality)
-      // maxQP: -1,                  // Max quantization param (-1 = no limit)
+        // ── Bitrate / Quality (defaults from dashboard) ───────────────
+        // minBitrate: 1,
+        // maxBitrate: 100,
+        // minQP: 20,
+        // maxQP: -1,
 
-      // ── Input (defaults from dashboard) ───────────────────────────────
-      // mouseInput: true,           // Enable mouse input
-      // keyBoardInput: true,        // Enable keyboard input
-      // touchInput: true,           // Enable touch input
-      // hoverMouse: true,           // Send mouse hover/move events to UE
-      // gamepadInput: true,         // Enable gamepad/controller input
-      // xrInput: true,              // Enable WebXR (VR/AR) input
-      // fakeMouseWithTouches: false, // Convert touch events to mouse events
+        // ── Input (defaults from dashboard) ───────────────────────────
+        // mouseInput: true,
+        // keyBoardInput: true,
+        // touchInput: true,
+        // hoverMouse: true,
+        // gamepadInput: true,
+        // xrInput: true,
+        // fakeMouseWithTouches: false,
 
-      // ── Audio (defaults from dashboard) ───────────────────────────────
-      // useMic: true,               // Enable microphone input (sent to UE)
+        // ── Audio (defaults from dashboard) ───────────────────────────
+        // useMic: true,
 
-      // ── AFK / Timeout (defaults from dashboard) ───────────────────────
-      // afktimeout: 120,            // Idle timeout in seconds (min: 1, max: 7200)
-    });
+        // ── AFK / Timeout (defaults from dashboard) ───────────────────
+        // afktimeout: 120,
+      });
 
+      if (!mounted) return;
 
-    
+      // Store SDK refs
+      pixelStreamingRef.current = pixelStreaming;
+      appStreamRef.current = appStream;
+      uiControlRef.current = UIControl;
 
-    PixelStreamingApp = pixelStreaming;
-    PixelStreamingUiApp = appStream;
-    UIControlApp = UIControl;
-   
+      /* ─── Reconnection Lifecycle ─────────────────────────────────── */
+      reconnectStream.on('state', (data) => {
+        switch (data.status) {
+          case 'connecting':
+          case 'reconnecting':
+            setIsLoading(true);
+            setIsMuted(true);
+            setLoadingTitle(LOADING_CONFIG.reconnectingTitle);
+            setLoadingSubtitle(LOADING_CONFIG.reconnectingSubtitle);
+            setLoadingStatus(LOADING_CONFIG.statusMessages.reconnecting);
+            setLoadingProgress(20);
+            isReconnecting.current = true;
+            break;
 
+          case 'connected':
+            setLoadingTitle(LOADING_CONFIG.reconnectedTitle);
+            setLoadingSubtitle(LOADING_CONFIG.subtitle);
+            setLoadingStatus(LOADING_CONFIG.statusMessages.reconnected);
+            setLoadingProgress(70);
+            break;
 
-    console.log("UIControlApp:",UIControlApp);
-    
-    /* =====================================================================
-       Reconnection Lifecycle → Loading Screen Updates
-       ===================================================================== */
-    reconnectStream.on("state", (data) => {
+          case 'disconnected':
+            setIsLoading(true);
+            if (!isReconnecting.current) {
+              setLoadingTitle('Disconnected');
+              setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
+              setLoadingStatus(LOADING_CONFIG.statusMessages.disconnected);
+              setLoadingProgress(0);
+            }
+            break;
 
+          case 'failed':
+            setIsLoading(true);
+            setLoadingTitle(LOADING_CONFIG.reconnectFailedTitle);
+            setLoadingSubtitle(LOADING_CONFIG.reconnectFailedSubtitle);
+            setLoadingStatus(LOADING_CONFIG.statusMessages.reconnectFailed);
+            setLoadingProgress(0);
+            break;
 
-      
-      switch (data.status) {
-        case "connecting":
-        case "reconnecting":
-          // Show loading overlay with reconnecting state
-          setIsLoading(true);
-          setIsMuted(true);
-          setLoadingTitle(LOADING_CONFIG.reconnectingTitle);
-          setLoadingSubtitle(LOADING_CONFIG.reconnectingSubtitle);
-          setLoadingStatus(LOADING_CONFIG.statusMessages.reconnecting);
-          setLoadingProgress(20);
-          setReconnecting(true);
-          break;
-/*
-        case "retrying":
-          // Update status to show retry in progress
-          setLoadingStatus(LOADING_CONFIG.statusMessages.retrying);
-          setLoadingProgress(40);
-          
-          break;
-*/
-        case "connected":
-          // Reconnected — stream events (playStream, onVideoInitialized)
-          // will dismiss the loading overlay once the video is ready.
-          setLoadingTitle(LOADING_CONFIG.reconnectedTitle);
-          setLoadingSubtitle(LOADING_CONFIG.subtitle);
-          setLoadingStatus(LOADING_CONFIG.statusMessages.reconnected);
-          setLoadingProgress(70);
-          break;
+          default:
+            break;
+        }
+      });
 
-        case "disconnected":
-          // Show disconnected state in loading overlay
-          setIsLoading(true);
-          if(!reconnecting){
+      /* ─── Hide default Pixel Streaming UI ────────────────────────── */
+      const uiFeaturesEl = appStream.uiFeaturesElement
+        || appStream.rootElement?.querySelector('#uiFeatures');
+      if (uiFeaturesEl) uiFeaturesEl.style.display = 'none';
+
+      /* ─── WebRTC Lifecycle Events → Loading Progress ─────────────── */
+      pixelStreaming.addEventListener('webRtcAutoConnect', () => {
+        setLoadingStatus(LOADING_CONFIG.statusMessages.connecting);
+        setLoadingProgress(15);
+      });
+
+      pixelStreaming.addEventListener('webRtcConnecting', () => {
+        setLoadingStatus(LOADING_CONFIG.statusMessages.webRtcConnecting);
+        setLoadingProgress(30);
+      });
+
+      pixelStreaming.addEventListener('webRtcSdp', () => {
+        setLoadingStatus(LOADING_CONFIG.statusMessages.sdpNegotiation);
+        setLoadingProgress(50);
+      });
+
+      pixelStreaming.addEventListener('webRtcConnected', () => {
+        setLoadingStatus(LOADING_CONFIG.statusMessages.webRtcConnected);
+        setLoadingProgress(70);
+      });
+
+      pixelStreaming.addEventListener('streamLoading', () => {
+        setLoadingStatus(LOADING_CONFIG.statusMessages.streamLoading);
+        setLoadingProgress(80);
+      });
+
+      pixelStreaming.addEventListener('playStream', () => {
+        setLoadingStatus(LOADING_CONFIG.statusMessages.playingStream);
+        setLoadingProgress(90);
+      });
+
+      pixelStreaming.addEventListener('webRtcFailed', () => {
+        setLoadingTitle('Connection Failed');
+        setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
+        setLoadingStatus(LOADING_CONFIG.statusMessages.failed);
+        setLoadingProgress(0);
+      });
+
+      pixelStreaming.addEventListener('webRtcDisconnected', () => {
+        if (!isReconnecting.current) {
           setLoadingTitle('Disconnected');
           setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
           setLoadingStatus(LOADING_CONFIG.statusMessages.disconnected);
-          setLoadingProgress(0);
-          }
-          break;
-
-        case "failed":
-          // Reconnection exhausted — show failure state
           setIsLoading(true);
-          setLoadingTitle(LOADING_CONFIG.reconnectFailedTitle);
-          setLoadingSubtitle(LOADING_CONFIG.reconnectFailedSubtitle);
-          setLoadingStatus(LOADING_CONFIG.statusMessages.reconnectFailed);
           setLoadingProgress(0);
-          break;
-      }
-    });
+        }
+      });
 
-    /* =====================================================================
-       Hide the default Pixel Streaming UI overlay (top-left controls).
-       ===================================================================== */
-    const uiFeaturesEl = appStream.uiFeaturesElement
-      || appStream.rootElement?.querySelector('#uiFeatures');
-    if (uiFeaturesEl) {
-      uiFeaturesEl.style.display = 'none';
-    }
+      /* ─── Stats ──────────────────────────────────────────────────── */
+      pixelStreaming.addEventListener('statsReceived', (e) => {
+        if (e.data?.aggregatedStats) {
+          const ps = extractPSStats(e.data.aggregatedStats);
+          if (ps) setStatsData(ps);
+        }
+      });
 
-    /* =====================================================================
-       WebRTC Lifecycle Events → Loading Progress
-       ===================================================================== */
+      /* ─── AFK Warning ───────────────────────────────────────────── */
+      pixelStreaming.addEventListener('afkWarningActivate', (e) => {
+        setAfkWarning(true);
+        setAfkCountdown(e.data.countDown);
+        dismissAfkRef.current = e.data.dismissAfk;
+      });
 
-    pixelStreaming.addEventListener('webRtcAutoConnect', () => {
-      setLoadingStatus(LOADING_CONFIG.statusMessages.connecting);
-      setLoadingProgress(15);
-    });
+      pixelStreaming.addEventListener('afkWarningUpdate', (e) => {
+        setAfkCountdown(e.data.countDown);
+      });
 
-    pixelStreaming.addEventListener('webRtcConnecting', () => {
-      setLoadingStatus(LOADING_CONFIG.statusMessages.webRtcConnecting);
-      setLoadingProgress(30);
-    });
+      pixelStreaming.addEventListener('afkWarningDeactivate', () => {
+        setAfkWarning(false);
+        dismissAfkRef.current = null;
+      });
 
-    pixelStreaming.addEventListener('webRtcSdp', () => {
-      setLoadingStatus(LOADING_CONFIG.statusMessages.sdpNegotiation);
-      setLoadingProgress(50);
-    });
+      pixelStreaming.addEventListener('afkTimedOut', () => {
+        setAfkWarning(false);
+        dismissAfkRef.current = null;
+        setLoadingTitle('Session Ended');
+        setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
+        setLoadingStatus('You were disconnected due to inactivity.');
+        setIsLoading(true);
+        setLoadingProgress(0);
+      });
 
-    pixelStreaming.addEventListener('webRtcConnected', () => {
-      setLoadingStatus(LOADING_CONFIG.statusMessages.webRtcConnected);
-      setLoadingProgress(70);
-    });
+      /* ─── Video Initialized ──────────────────────────────────────── */
+      appStream.onVideoInitialized = () => {
+        videoRef.current.append(appStream.rootElement);
 
-    pixelStreaming.addEventListener('streamLoading', () => {
-      setLoadingStatus(LOADING_CONFIG.statusMessages.streamLoading);
-      setLoadingProgress(80);
-    });
+        // Hide default UI after DOM mount
+        const uiEl = appStream.rootElement?.querySelector('#uiFeatures');
+        if (uiEl) uiEl.style.display = 'none';
 
-    pixelStreaming.addEventListener('playStream', () => {
-      setLoadingStatus(LOADING_CONFIG.statusMessages.playingStream);
-      setLoadingProgress(90);
-    });
+        const videoElement = appStream.stream.videoElementParent.querySelector('video');
+        if (videoElement) {
+          videoElement.muted = true;
+          videoElement.focus();
+          videoElement.autoplay = true;
+          videoElement.tabIndex = 0;
+        }
 
-    pixelStreaming.addEventListener('webRtcFailed', () => {
-      setLoadingTitle('Connection Failed');
-      setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
-      setLoadingStatus(LOADING_CONFIG.statusMessages.failed);
-      setLoadingProgress(0);
-    });
-
-    pixelStreaming.addEventListener('webRtcDisconnected', () => {
-
-      if(!reconnecting){
-      setLoadingTitle('Disconnected');
-      setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
-      setLoadingStatus(LOADING_CONFIG.statusMessages.disconnected);
-      setIsLoading(true);
-      setLoadingProgress(0);
-      }
-    });
-
-    /* =====================================================================
-       Stats: Extract same fields the default Pixel Streaming panel shows.
-       ===================================================================== */
-    pixelStreaming.addEventListener('statsReceived', (e) => {
-      if (e.data && e.data.aggregatedStats) {
-        const ps = extractPSStats(e.data.aggregatedStats);
-        if (ps) setStatsData(ps);
-      }
-    });
-
-    /* =====================================================================
-       AFK Warning: Custom overlay instead of the default black screen.
-       ===================================================================== */
-    pixelStreaming.addEventListener('afkWarningActivate', (e) => {
-      setAfkWarning(true);
-      setAfkCountdown(e.data.countDown);
-      dismissAfkRef.current = e.data.dismissAfk;
-    });
-
-    pixelStreaming.addEventListener('afkWarningUpdate', (e) => {
-      setAfkCountdown(e.data.countDown);
-    });
-
-    pixelStreaming.addEventListener('afkWarningDeactivate', () => {
-      setAfkWarning(false);
-      dismissAfkRef.current = null;
-    });
-
-    pixelStreaming.addEventListener('afkTimedOut', () => {
-      setAfkWarning(false);
-      dismissAfkRef.current = null;
-      setLoadingTitle('Session Ended');
-      setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
-      setLoadingStatus('You were disconnected due to inactivity.');
-      setIsLoading(true);
-      setLoadingProgress(0);
-    });
-
-    appStream.onVideoInitialized = () => {
-      videoRef.current.append(appStream.rootElement);
-
-      // Hide default UI after DOM is mounted
-      const uiEl = appStream.rootElement?.querySelector('#uiFeatures');
-      if (uiEl) uiEl.style.display = 'none';
-
-      const videoElement = appStream.stream.videoElementParent.querySelector("video");
-      if (videoElement) {
-        videoElement.muted = true;
-        videoElement.focus();
-        videoElement.autoplay = true;
-        videoElement.tabIndex = 0;
-      }
-
-      // Mute the separate audio element the SDK creates
-      try {
-        const audioEl = appStream.stream._webRtcController.streamController.audioElement;
+        // Mute the separate audio element the SDK creates
+        const audioEl = appStream.stream._webRtcController?.streamController?.audioElement;
         if (audioEl) audioEl.muted = true;
-      } catch (_) {}
 
-      // Hide loading screen
-      setLoadingProgress(100);
-      setTimeout(() => {
-        setIsLoading(false);
-        setQueuePosition(null);
-        setLoadingTitle(LOADING_CONFIG.title);
-        setLoadingSubtitle(LOADING_CONFIG.subtitle);
-      }, 300);
+        // Dismiss loading screen
+        setLoadingProgress(100);
+        setTimeout(() => {
+          setIsLoading(false);
+          setQueuePosition(null);
+          setLoadingTitle(LOADING_CONFIG.title);
+          setLoadingSubtitle(LOADING_CONFIG.subtitle);
+        }, 300);
+      };
+
+      appStream.onDisconnect = () => {};
+
+      /* ─── Queue ──────────────────────────────────────────────────── */
+      queueHandler((msg) => {
+        setQueuePosition(msg.position);
+        setLoadingStatus(LOADING_CONFIG.statusMessages.inQueue);
+      });
+
+      /* ─── UE Response Listener ───────────────────────────────────── */
+      pixelStreaming.addResponseEventListener('handle_responses', () => {
+        // Handle custom UE → Web messages here
+        // const data = JSON.parse(response);
+      });
     };
 
-    appStream.onDisconnect = function () {
-      console.log("Disconnected");
-    };
+    startPlay();
 
-    queueHandler((msg) => {
-      console.log("User is in queue at position:", msg.position);
-      setQueuePosition(msg.position);
-      setLoadingStatus(LOADING_CONFIG.statusMessages.inQueue);
-    });
-
-    PixelStreamingApp.addResponseEventListener('handle_responses', handleResponseApp);
-  };
-
-  useEffect(() => {
-    if (projectId) {
-      startPlay();
-    }
-  }, [projectId]);
+    return () => { mounted = false; };
+  }, [projectId, streamerId, sfuHost, sfuPlayer]);
 
 
+  /* =====================================================================
+     Event Handlers
+     ===================================================================== */
 
-
-  const handleResponseApp = (response) => {
-    console.log(response);
-  };
-
-
-  // ── AFK dismiss ────────────────────────────────────────────────────────
   const handleDismissAfk = useCallback(() => {
-    if (dismissAfkRef.current) {
-      dismissAfkRef.current();
-    }
+    dismissAfkRef.current?.();
   }, []);
 
-
-  // ── Mute / Unmute ──────────────────────────────────────────────────────
   const toggleMute = useCallback(() => {
     const newMuted = !isMuted;
 
-    const videoElement = PixelStreamingUiApp?.stream?.videoElementParent?.querySelector("video");
-    if (videoElement) {
-      videoElement.muted = newMuted;
-    }
+    const videoElement = appStreamRef.current?.stream?.videoElementParent?.querySelector('video');
+    if (videoElement) videoElement.muted = newMuted;
 
-    try {
-      const audioEl = PixelStreamingUiApp.stream._webRtcController.streamController.audioElement;
-      if (audioEl) {
-        audioEl.muted = newMuted;
-        if (!newMuted && audioEl.paused) {
-          audioEl.play().catch(() => {});
-        }
-      }
-    } catch (_) {}
+    const audioEl = appStreamRef.current?.stream?._webRtcController?.streamController?.audioElement;
+    if (audioEl) {
+      audioEl.muted = newMuted;
+      if (!newMuted && audioEl.paused) audioEl.play().catch(() => {});
+    }
 
     setIsMuted(newMuted);
   }, [isMuted]);
 
-
-  // ── Fullscreen ─────────────────────────────────────────────────────────
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      document.documentElement.requestFullscreen().catch(() => {});
     } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+      document.exitFullscreen().catch(() => {});
     }
   }, []);
 
@@ -529,51 +447,40 @@ const App = () => {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
+  const toggleStats = useCallback(() => setShowStats((prev) => !prev), []);
 
-  // ── Stats popup ────────────────────────────────────────────────────────
-  const toggleStats = useCallback(() => {
-    setShowStats((prev) => !prev);
-  }, []);
+  /* ─── Developer Tools Handlers ───────────────────────────────────── */
 
-
-  // ── Developer Tools handlers ──────────────────────────────────────────
-
-  // Send a console command to UE (e.g., "stat fps", "stat unit", "r.SetRes 1920x1080f")
   const handleConsoleCommand = useCallback((cmd) => {
-    if (PixelStreamingApp) {
-      PixelStreamingApp.emitConsoleCommand(cmd);
-    }
+    pixelStreamingRef.current?.emitConsoleCommand(cmd);
   }, []);
 
-  // Send a custom JSON payload to UE via UI Interaction
   const handleSendToUE = useCallback((jsonStr) => {
-    if (PixelStreamingUiApp) {
-      try {
-        const descriptor = JSON.parse(jsonStr);
-        PixelStreamingUiApp.stream.emitUIInteraction(descriptor);
-      } catch (e) {
-        console.error('Invalid JSON:', e);
-      }
+    try {
+      const descriptor = JSON.parse(jsonStr);
+      appStreamRef.current?.stream?.emitUIInteraction(descriptor);
+    } catch (e) {
+      console.error('Invalid JSON:', e.message);
     }
   }, []);
 
-  // Manually disconnect the stream
   const handleDisconnect = useCallback(() => {
-    if (PixelStreamingApp) {
-      PixelStreamingApp.disconnect();
-    }
+    pixelStreamingRef.current?.disconnect();
   }, []);
 
-  // Enable microphone input (sends mic audio to UE)
   const handleMicrophone = useCallback(async () => {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      PixelStreamingApp.unmuteMicrophone(true);
+      pixelStreamingRef.current?.unmuteMicrophone(true);
     } catch (err) {
-      console.error('Microphone access denied', err);
+      console.error('Microphone access denied:', err.message);
     }
   }, []);
 
+
+  /* =====================================================================
+     Render Helpers
+     ===================================================================== */
 
   const renderStatValue = (label, value) => {
     if (value === undefined || value === null) return null;
@@ -589,75 +496,47 @@ const App = () => {
   };
 
 
+  /* =====================================================================
+     Render
+     ===================================================================== */
   return (
-    <div className='containMain'>
+    <div className="containMain">
 
-      {/* ================================================================
-          LOADING / DISCONNECTED SCREEN
-          ================================================================ */}
+      {/* Loading / Disconnected Screen */}
       {isLoading && (
-        <div className='loading-overlay' style={{ backgroundColor: LOADING_CONFIG.backgroundColor }}>
-
+        <div className="loading-overlay" style={{ backgroundColor: LOADING_CONFIG.backgroundColor }}>
           {LOADING_CONFIG.logoUrl && (
             <img src={LOADING_CONFIG.logoUrl} alt="Logo" className="loading-logo" />
           )}
-
           {LOADING_CONFIG.showSpinner && loadingProgress > 0 && (
             <div className="loading-spinner" style={{ borderTopColor: LOADING_CONFIG.accentColor }} />
           )}
-
           <h2 className="loading-title">{loadingTitle}</h2>
           <p className="loading-subtitle">{loadingSubtitle}</p>
-
           {loadingProgress > 0 && (
             <div className="loading-progress-track">
               <div
                 className="loading-progress-fill"
-                style={{
-                  width: `${loadingProgress}%`,
-                  backgroundColor: LOADING_CONFIG.accentColor,
-                }}
+                style={{ width: `${loadingProgress}%`, backgroundColor: LOADING_CONFIG.accentColor }}
               />
             </div>
           )}
-
           <p className="loading-status">{loadingStatus}</p>
-
           {queuePosition !== null && (
             <div className="loading-queue">
-              <p className="loading-queue-text">
-                {LOADING_CONFIG.queueMessage(queuePosition)}
-              </p>
+              <p className="loading-queue-text">{LOADING_CONFIG.queueMessage(queuePosition)}</p>
               <div className="loading-queue-badge" style={{ backgroundColor: LOADING_CONFIG.accentColor }}>
                 #{queuePosition}
               </div>
             </div>
           )}
-
-          {/* ============================================================
-              CUSTOM ELEMENTS: Add your own buttons, messages, or
-              components inside the loading screen here.
-              ============================================================ */}
-
         </div>
       )}
 
-      {/* Video container */}
-      <div
-        id="videoElement"
-        ref={videoRef}
-        style={{
-          backgroundSize: "cover",
-          position: "relative"
-        }}
-      />
+      {/* Video Container */}
+      <div id="videoElement" ref={videoRef} />
 
-      {/* ================================================================
-          AFK WARNING OVERLAY
-          ================================================================
-          Customizable overlay shown when the user is idle.
-          Replace the text, styling, or add your own branding.
-          ================================================================ */}
+      {/* AFK Warning Overlay */}
       {afkWarning && (
         <div className="afk-overlay" onClick={handleDismissAfk}>
           <div className="afk-card">
@@ -684,18 +563,10 @@ const App = () => {
         </div>
       )}
 
-      {/* ================================================================
-          STREAM CONTROLS
-          ================================================================ */}
+      {/* Stream Controls */}
       {!isLoading && (
         <div className="stream-controls">
-
-          {/* Mute / Unmute */}
-          <button
-            className="control-btn"
-            onClick={toggleMute}
-            title={isMuted ? 'Unmute' : 'Mute'}
-          >
+          <button className="control-btn" onClick={toggleMute} title={isMuted ? 'Unmute' : 'Mute'}>
             {isMuted ? (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
@@ -711,12 +582,7 @@ const App = () => {
             )}
           </button>
 
-          {/* Fullscreen */}
-          <button
-            className="control-btn"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-          >
+          <button className="control-btn" onClick={toggleFullscreen} title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}>
             {isFullscreen ? (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="4 14 10 14 10 20" />
@@ -734,12 +600,7 @@ const App = () => {
             )}
           </button>
 
-          {/* Info / Stats */}
-          <button
-            className={`control-btn ${showStats ? 'control-btn-active' : ''}`}
-            onClick={toggleStats}
-            title="Stream Info"
-          >
+          <button className={`control-btn ${showStats ? 'control-btn-active' : ''}`} onClick={toggleStats} title="Stream Info">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="16" x2="12" y2="12" />
@@ -747,26 +608,18 @@ const App = () => {
             </svg>
           </button>
 
-          {/* Developer Tools (toggle via SHOW_DEV_TOOLS constant) */}
           {SHOW_DEV_TOOLS && (
-            <button
-              className={`control-btn ${showDevTools ? 'control-btn-active' : ''}`}
-              onClick={() => setShowDevTools((prev) => !prev)}
-              title="Developer Tools"
-            >
+            <button className={`control-btn ${showDevTools ? 'control-btn-active' : ''}`} onClick={() => setShowDevTools((prev) => !prev)} title="Developer Tools">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="4 17 10 11 4 5" />
                 <line x1="12" y1="19" x2="20" y2="19" />
               </svg>
             </button>
           )}
-
         </div>
       )}
 
-      {/* ================================================================
-          STATS POPUP — same fields as default Pixel Streaming panel
-          ================================================================ */}
+      {/* Stats Popup */}
       {showStats && (
         <div className="stats-popup">
           <div className="stats-popup-header">
@@ -783,12 +636,7 @@ const App = () => {
         </div>
       )}
 
-      {/* ================================================================
-          DEVELOPER TOOLS PANEL
-          ================================================================
-          Toggle visibility via the SHOW_DEV_TOOLS constant at the top
-          of this file. Set to false to hide in production.
-          ================================================================ */}
+      {/* Developer Tools Panel */}
       {SHOW_DEV_TOOLS && showDevTools && (
         <div className="dev-tools-popup">
           <div className="stats-popup-header">
@@ -796,79 +644,52 @@ const App = () => {
             <button className="stats-popup-close" onClick={() => setShowDevTools(false)}>&times;</button>
           </div>
           <div className="stats-popup-body">
-
-            {/* ── Send to UE ────────────────────────────────── */}
             <div className="dev-tools-section">
               <label className="dev-tools-label">Console Command</label>
               <div className="dev-tools-row">
-                <input
-                  className="dev-tools-input"
-                  type="text"
-                  value={consoleCmd}
-                  onChange={(e) => setConsoleCmd(e.target.value)}
-                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') handleConsoleCommand(consoleCmd); }}
-                  placeholder="e.g. stat fps"
-                />
+                <input className="dev-tools-input" type="text" value={consoleCmd} onChange={(e) => setConsoleCmd(e.target.value)} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') handleConsoleCommand(consoleCmd); }} placeholder="e.g. stat fps" />
                 <button className="dev-tools-btn" onClick={() => handleConsoleCommand(consoleCmd)}>Send</button>
               </div>
             </div>
-
             <div className="dev-tools-section">
               <label className="dev-tools-label">UI Interaction (JSON)</label>
               <div className="dev-tools-row">
-                <input
-                  className="dev-tools-input"
-                  type="text"
-                  value={uiInteractionJson}
-                  onChange={(e) => setUiInteractionJson(e.target.value)}
-                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') handleSendToUE(uiInteractionJson); }}
-                  placeholder='{"type":"action","value":"..."}'
-                />
+                <input className="dev-tools-input" type="text" value={uiInteractionJson} onChange={(e) => setUiInteractionJson(e.target.value)} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') handleSendToUE(uiInteractionJson); }} placeholder='{"type":"action","value":"..."}' />
                 <button className="dev-tools-btn" onClick={() => handleSendToUE(uiInteractionJson)}>Send</button>
               </div>
             </div>
-
-            {/* ── Connection ─────────────────────────────────── */}
             <div className="dev-tools-section">
               <label className="dev-tools-label">Connection</label>
               <div className="dev-tools-row">
                 <button className="dev-tools-btn dev-tools-btn-danger" onClick={handleDisconnect}>Disconnect</button>
               </div>
             </div>
-
-            {/* ── Audio ──────────────────────────────────────── */}
             <div className="dev-tools-section">
               <label className="dev-tools-label">Audio</label>
               <div className="dev-tools-row">
-                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.toggleAudio()}>Toggle Audio</button>
+                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.toggleAudio()}>Toggle Audio</button>
                 <button className="dev-tools-btn" onClick={handleMicrophone}>Enable Mic</button>
               </div>
             </div>
-
-            {/* ── Resolution ─────────────────────────────────── */}
             <div className="dev-tools-section">
               <label className="dev-tools-label">Resolution</label>
               <div className="dev-tools-row dev-tools-row-wrap">
-                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.handleResMax('854x480')}>480p</button>
-                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.handleResMax('1280x720')}>720p</button>
-                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.handleResMax('1920x1080')}>1080p</button>
-                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.handleResMax('2560x1440')}>1440p</button>
+                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.handleResMax('854x480')}>480p</button>
+                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.handleResMax('1280x720')}>720p</button>
+                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.handleResMax('1920x1080')}>1080p</button>
+                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.handleResMax('2560x1440')}>1440p</button>
               </div>
             </div>
-
-            {/* ── Hovering Mouse ──────────────────────────────── */}
             <div className="dev-tools-section">
               <label className="dev-tools-label">Hovering Mouse</label>
               <div className="dev-tools-row">
-                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.toggleHoveringMouse(true)}>Enable</button>
-                <button className="dev-tools-btn" onClick={() => UIControlApp && UIControlApp.toggleHoveringMouse(false)}>Disable</button>
+                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.toggleHoveringMouse(true)}>Enable</button>
+                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.toggleHoveringMouse(false)}>Disable</button>
               </div>
             </div>
-
           </div>
         </div>
       )}
-
     </div>
   );
 };

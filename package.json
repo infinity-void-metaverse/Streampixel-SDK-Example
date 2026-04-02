@@ -1,7 +1,9 @@
 {
-  "name": "streampixelsdkexample",
-  "version": "0.1.0",
+  "name": "streampixel-sdk-example",
+  "version": "1.0.0",
+  "description": "Example React application demonstrating StreamPixel Web SDK integration for streaming Unreal Engine content via WebRTC.",
   "private": true,
+  "license": "MIT",
   "dependencies": {
     "browserify-zlib": "^0.2.0",
     "crypto-browserify": "^3.12.1",
