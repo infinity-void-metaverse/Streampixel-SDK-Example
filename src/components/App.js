@@ -648,7 +648,6 @@ const App = () => {
         ref={videoRef}
         style={{
           backgroundSize: "cover",
-          height: "100dvh",
           position: "relative"
         }}
       />
