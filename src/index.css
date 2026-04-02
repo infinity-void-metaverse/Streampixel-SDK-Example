@@ -210,7 +210,59 @@ video {
 
 
 /* =========================================================================
-   Popup Shared Styles (used by settings, dev tools)
+   Stats Popup — displays data from UIControl.getStreamStats()
+   ========================================================================= */
+
+.stats-popup {
+  position: fixed;
+  bottom: 76px;
+  right: 20px;
+  width: 280px;
+  max-height: 400px;
+  background: rgba(20, 20, 22, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  z-index: 10001;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stats-row:last-child {
+  border-bottom: none;
+}
+
+.stats-label {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+}
+
+.stats-value {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-empty {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+  text-align: center;
+  margin: 16px 0;
+}
+
+
+/* =========================================================================
+   Popup Shared Styles (used by stats, settings, dev tools)
    ========================================================================= */
 
 .stats-popup-header {
@@ -485,6 +537,7 @@ video {
     height: 40px;
   }
 
+  .stats-popup,
   .settings-popup,
   .dev-tools-popup {
     right: 12px;

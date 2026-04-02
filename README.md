@@ -154,14 +154,14 @@ You don't need to configure signaling URLs, TURN servers, ICE configs, or auth t
 | `maxBitrate` | `number` | From project | Maximum bitrate (Mbps) |
 | `minQP` | `number` | From project | Min quantization parameter (1–51, lower = better) |
 | `maxQP` | `number` | From project | Max quantization parameter (-1 = no limit) |
-| `mouseInput` | `boolean` | `false` | Enable mouse input |
-| `keyBoardInput` | `boolean` | `false` | Enable keyboard input |
-| `touchInput` | `boolean` | `false` | Enable touch input |
-| `gamepadInput` | `boolean` | `false` | Enable gamepad/controller input |
-| `xrInput` | `boolean` | `false` | Enable WebXR (VR/AR) input |
-| `hoverMouse` | `boolean` | `false` | Send mouse hover/move events to UE |
-| `fakeMouseWithTouches` | `boolean` | `false` | Convert touch events to mouse events |
-| `useMic` | `boolean` | `false` | Enable microphone input (sent to UE) |
+| `mouseInput` | `boolean` | From project | Enable mouse input |
+| `keyBoardInput` | `boolean` | From project | Enable keyboard input |
+| `touchInput` | `boolean` | From project | Enable touch input |
+| `gamepadInput` | `boolean` | From project | Enable gamepad/controller input |
+| `xrInput` | `boolean` | From project | Enable WebXR (VR/AR) input |
+| `hoverMouse` | `boolean` | From project | Send mouse hover/move events to UE |
+| `fakeMouseWithTouches` | `boolean` | From project | Convert touch events to mouse events |
+| `useMic` | `boolean` | From project | Enable microphone input (sent to UE) |
 | `afktimeout` | `number` | From project | Idle timeout in seconds (1–7200) |
 
 ### Return Values
@@ -373,16 +373,17 @@ StreamPixelApplication({
 
 ## Input Controls
 
-Enable specific input methods via config flags:
+All input settings default to your **StreamPixel dashboard** configuration. Only pass these if you need to override them on the client side:
 
 ```js
 StreamPixelApplication({
   appId: "...",
+  // All of these default from your dashboard — only set to override:
   mouseInput: true,            // Mouse clicks and position
   keyBoardInput: true,         // Keyboard events
   touchInput: true,            // Touch events (mobile/tablet)
-  gamepadInput: false,         // Gamepad/controller input
-  xrInput: false,              // WebXR (VR/AR) controller input
+  gamepadInput: true,          // Gamepad/controller input
+  xrInput: true,               // WebXR (VR/AR) controller input
   hoverMouse: true,            // Send mouse move/hover events to UE
   fakeMouseWithTouches: false, // Convert touch events to mouse events
 });

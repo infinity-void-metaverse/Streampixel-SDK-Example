@@ -76,10 +76,12 @@ const App = () => {
   // Controls state
   const [isMuted, setIsMuted] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [statsData, setStatsData] = useState(null);
 
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
-  const [currentResolution, setCurrentResolution] = useState('Auto');
+  const [currentResolution, setCurrentResolution] = useState('Auto (Dashboard)');
 
   // AFK state
   const [afkWarning, setAfkWarning] = useState(false);
@@ -398,12 +400,16 @@ const App = () => {
   }, []);
 
   const toggleStats = useCallback(() => {
-    uiControlRef.current?.getStreamStats();
-  }, []);
+    if (!showStats) {
+      const data = uiControlRef.current?.getStreamStats();
+      if (data) setStatsData(data);
+    }
+    setShowStats((prev) => !prev);
+  }, [showStats]);
   const toggleSettings = useCallback(() => setShowSettings((prev) => !prev), []);
 
   const RESOLUTION_OPTIONS = [
-    { label: 'Auto', value: null },
+    { label: 'Auto (Dashboard)', value: null },
     { label: '480p', value: '854x480' },
     { label: '720p', value: '1280x720' },
     { label: '1080p', value: '1920x1080' },
@@ -552,7 +558,7 @@ const App = () => {
             )}
           </button>
 
-          <button className="control-btn" onClick={toggleStats} title="Stream Info">
+          <button className={`control-btn ${showStats ? 'control-btn-active' : ''}`} onClick={toggleStats} title="Stream Info">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="16" x2="12" y2="12" />
@@ -575,6 +581,28 @@ const App = () => {
               </svg>
             </button>
           )}
+        </div>
+      )}
+
+      {/* Stats Popup — data from UIControl.getStreamStats() */}
+      {showStats && (
+        <div className="stats-popup">
+          <div className="stats-popup-header">
+            <span className="stats-popup-title">Stream Info</span>
+            <button className="stats-popup-close" onClick={() => setShowStats(false)}>&times;</button>
+          </div>
+          <div className="stats-popup-body">
+            {statsData && Object.keys(statsData).length > 0 ? (
+              Object.entries(statsData).map(([key, val]) => (
+                <div className="stats-row" key={key}>
+                  <span className="stats-label">{key}</span>
+                  <span className="stats-value">{val}</span>
+                </div>
+              ))
+            ) : (
+              <p className="stats-empty">Waiting for stream statistics...</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -633,9 +661,8 @@ const App = () => {
               </div>
             </div>
             <div className="dev-tools-section">
-              <label className="dev-tools-label">Audio</label>
+              <label className="dev-tools-label">Microphone</label>
               <div className="dev-tools-row">
-                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.toggleAudio()}>Toggle Audio</button>
                 <button className="dev-tools-btn" onClick={handleMicrophone}>Enable Mic</button>
               </div>
             </div>
