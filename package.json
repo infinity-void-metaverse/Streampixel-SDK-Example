@@ -16,7 +16,7 @@
     "react-scripts": "^5.0.1",
     "stream-browserify": "^3.0.0",
     "stream-http": "^3.2.0",
-    "@streampixel/core": "file:../SDK-GENERATOR/packages/core"
+    "@streampixel/core": "file:vendor/streampixel-core-2.0.0-alpha.0.tgz"
   },
   "scripts": {
     "start": "react-scripts start",
