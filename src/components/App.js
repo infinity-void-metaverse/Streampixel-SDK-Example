@@ -5,6 +5,12 @@ import { VoiceChat } from '@streampixel/core/voice';
 /* =========================================================================
    Streampixel SDK v2 example — @streampixel/core
 
+   👋 NEW HERE? Don't start in this file — it's the FULL reference
+   (password gate, chat, SFU, stats, dev tools: ~800 lines).
+   Start with public/examples/minimal.html — the whole integration in
+   15 lines — then come back when you need a specific feature. Each
+   section below is independent: find the feature, copy the section.
+
    Core is HEADLESS: it exposes typed state/events and paints nothing
    (except the optional built-in `loading: true` overlay, unused here).
    Everything you see in this file's render tree is example UI you own —
