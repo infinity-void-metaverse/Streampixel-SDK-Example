@@ -13,41 +13,6 @@ it, or replace it entirely; the SDK only provides events and methods.
 
 ---
 
-## ⚡ Your first stream in 60 seconds
-
-**No build tools.** The entire integration is one call:
-
-```html
-<div id="app" style="position:fixed;inset:0"></div>
-<script type="module">
-  import { StreamPixel } from '@streampixel/core';
-
-  const stream = await StreamPixel.create({
-    appId: 'YOUR_PROJECT_ID',                  // from the Streampixel dashboard
-    container: document.getElementById('app'), // video mounts here
-    loading: true,                             // branded loading screen built in
-  });
-
-  stream.on('state', (s) => console.log(s.kind));
-</script>
-```
-
-That's a production-grade session: authentication, GPU placement, queueing,
-reconnection and telemetry are all inside `create()`.
-
-Try it right now: **[public/examples/minimal.html](public/examples/minimal.html)**
-is exactly this, runnable without npm:
-
-```bash
-npx serve public
-# → http://localhost:3000/examples/minimal.html?appId=YOUR_PROJECT_ID
-```
-
-Then graduate: minimal.html → this app (`src/components/App.js`, the full
-custom-UI reference) → the tables below when you need every option.
-
----
-
 ## Table of contents
 
 1. [Quick start](#quick-start)
@@ -176,24 +141,6 @@ Subscribe once; render everything from this:
 
 ```js
 stream.on('state', (s) => { … });
-```
-
-```mermaid
-stateDiagram-v2
-    [*] --> resolving
-    resolving --> queued: at capacity
-    queued --> starting
-    resolving --> starting
-    starting --> connecting
-    connecting --> streaming
-    streaming --> stalled: no frames 10s
-    stalled --> recovering: auto retry (once)
-    recovering --> connecting
-    streaming --> reconnecting: network drop
-    reconnecting --> streaming: soft reconnect,\nvideo keeps playing
-    reconnecting --> ended: 180s window spent
-    streaming --> ended
-    ended --> [*]
 ```
 
 | `s.kind` | Meaning | Recommended UX |
