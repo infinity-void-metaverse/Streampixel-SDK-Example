@@ -27,7 +27,7 @@ npm start
 
 | Param | Meaning |
 |---|---|
-| `?platform=prod` | Target production (default is **staging** while v2 is pre-GA) |
+| `?platform=staging` | Target the staging control plane (default is **production**) |
 | `?shared=host` | Shared (SFU) viewing — host role: owns the session and input |
 | `?shared=viewer&hostStreamerId=<id>` | Watch a host's session (watch-only, enforced server-side) |
 | `?streamerId=<id>` | Pin a specific streamer (session affinity) |

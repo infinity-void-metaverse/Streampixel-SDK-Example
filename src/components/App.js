@@ -129,13 +129,11 @@ const App = () => {
      ===================================================================== */
   const startStream = useCallback(async (id, authOverride) => {
     const params = new URLSearchParams(window.location.search);
-    // Linked-development default: staging. Use ?platform=prod for production.
-    const platformHost =
-      params.get('platform') === 'prod'
-        ? undefined // core's default: https://platform.streampixel.io
-        : 'https://platform.staging.streampixel.io';
-    const telemetryHost =
-      params.get('platform') === 'prod' ? undefined : 'https://telemetry.staging.streampixel.io';
+    // PRODUCTION by default (the SDK's own defaults). ?platform=staging opts in
+    // to the staging control plane for SDK development.
+    const staging = params.get('platform') === 'staging';
+    const platformHost = staging ? 'https://platform.staging.streampixel.io' : undefined;
+    const telemetryHost = staging ? 'https://telemetry.staging.streampixel.io' : undefined;
 
     // Shared (SFU) viewing: ?shared=host, or ?shared=viewer&hostStreamerId=<id>
     const sharedParam = params.get('shared');
@@ -342,7 +340,7 @@ const App = () => {
         userName: `Guest-${Math.floor(Math.random() * 1000)}`,
         voice: false, // join muted; mic is opt-in below
         platformHost:
-          params.get('platform') === 'prod' ? undefined : 'https://platform.staging.streampixel.io',
+          params.get('platform') === 'staging' ? 'https://platform.staging.streampixel.io' : undefined,
       });
       chat.on('message', (m) =>
         setChatMessages((prev) => [...prev.slice(-99), { ...m, ts: Date.now() }])
