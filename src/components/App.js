@@ -92,6 +92,9 @@ const App = () => {
   const [afkCountdown, setAfkCountdown] = useState(0);
   const dismissAfkRef = useRef(null);
 
+  // On-screen keyboard (UE text fields): null = closed, string = current text
+  const [oskText, setOskText] = useState(null);
+
   // Developer Tools state
   const [showDevTools, setShowDevTools] = useState(false);
   const [consoleCmd, setConsoleCmd] = useState('stat fps');
@@ -276,11 +279,8 @@ const App = () => {
       }
     });
 
-    /* ─── On-screen keyboard (UE text fields on mobile) ──────────────── */
-    stream.on('osk', ({ contents }) => {
-      const text = window.prompt('Enter text', contents ?? '');
-      if (text !== null) stream.sendTextboxEntry(text);
-    });
+    /* ─── On-screen keyboard: UE focused a text field ────────────────── */
+    stream.on('osk', ({ contents }) => setOskText(contents ?? ''));
 
     /* ─── UE → Web messages ──────────────────────────────────────────── */
     stream.on('ueMessage', (message) => {
@@ -311,6 +311,11 @@ const App = () => {
   const handleDismissAfk = useCallback(() => {
     dismissAfkRef.current?.();
   }, []);
+
+  const submitOsk = useCallback(() => {
+    if (oskText !== null) streamRef.current?.sendTextboxEntry(oskText);
+    setOskText(null);
+  }, [oskText]);
 
   const toggleMute = useCallback(() => {
     const audible = streamRef.current?.toggleAudio();
@@ -475,6 +480,48 @@ const App = () => {
             >
               I'm still here
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* On-screen keyboard modal — UE requested text input */}
+      {oskText !== null && (
+        <div className="afk-overlay" onClick={() => setOskText(null)}>
+          <div className="afk-card" onClick={(e) => e.stopPropagation()}>
+            <h2 className="afk-title">Enter text</h2>
+            <p className="afk-subtitle">The application is asking for input</p>
+            <input
+              type="text"
+              value={oskText}
+              autoFocus
+              onChange={(e) => setOskText(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') submitOsk();
+                if (e.key === 'Escape') setOskText(null);
+              }}
+              style={{
+                width: '100%', boxSizing: 'border-box', margin: '12px 0',
+                padding: '12px 14px', borderRadius: 8, border: '1px solid #3a3a3e',
+                background: '#101012', color: '#eee', fontSize: 15, outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <button
+                className="afk-btn"
+                style={{ backgroundColor: LOADING_CONFIG.accentColor }}
+                onClick={submitOsk}
+              >
+                Send
+              </button>
+              <button
+                className="afk-btn"
+                style={{ backgroundColor: '#3a3a3e' }}
+                onClick={() => setOskText(null)}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
