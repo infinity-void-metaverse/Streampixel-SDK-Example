@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { StreamPixel, AuthError, SDK_VERSION } from '@streampixel/core';
+import { VoiceChat } from '@streampixel/core/voice';
 
 /* =========================================================================
    Streampixel SDK v2 example — @streampixel/core
@@ -95,6 +96,19 @@ const App = () => {
   // On-screen keyboard (UE text fields): null = closed, string = current text
   const [oskText, setOskText] = useState(null);
 
+  // Chat (voice/text via @streampixel/core/voice) — available when the ticket
+  // carried a voiceToken, i.e. the project has chat enabled in the dashboard.
+  const chatRef = useRef(null);
+  const [chatAvailable, setChatAvailable] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatJoined, setChatJoined] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [micOn, setMicOn] = useState(false);
+  const [roster, setRoster] = useState({ localParticipant: null, remoteParticipants: [] });
+  const [someoneTyping, setSomeoneTyping] = useState(false);
+  const typingTimer = useRef(null);
+
   // Developer Tools state
   const [showDevTools, setShowDevTools] = useState(false);
   const [consoleCmd, setConsoleCmd] = useState('stat fps');
@@ -183,6 +197,7 @@ const App = () => {
 
     streamRef.current = stream;
     window.spStream = stream; // handy for the browser console
+    setChatAvailable(!!stream.voiceToken);
 
     // The dashboard's allowed ladder → the quality picker.
     setResolutionOptions([
@@ -316,6 +331,52 @@ const App = () => {
     if (oskText !== null) streamRef.current?.sendTextboxEntry(oskText);
     setOskText(null);
   }, [oskText]);
+
+  /* ─── Chat: lazy-join the project room on first open ────────────────── */
+  const openChat = useCallback(async () => {
+    setChatOpen(true);
+    if (chatRef.current || !streamRef.current) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const chat = VoiceChat.for(streamRef.current, {
+        userName: `Guest-${Math.floor(Math.random() * 1000)}`,
+        voice: false, // join muted; mic is opt-in below
+        platformHost:
+          params.get('platform') === 'prod' ? undefined : 'https://platform.staging.streampixel.io',
+      });
+      chat.on('message', (m) =>
+        setChatMessages((prev) => [...prev.slice(-99), { ...m, ts: Date.now() }])
+      );
+      chat.on('roster', setRoster);
+      chat.on('typing', () => {
+        setSomeoneTyping(true);
+        clearTimeout(typingTimer.current);
+        typingTimer.current = setTimeout(() => setSomeoneTyping(false), 2500);
+      });
+      chat.on('deviceError', (e) => console.warn('[chat]', e.message));
+      await chat.join();
+      chatRef.current = chat;
+      setChatJoined(true);
+    } catch (err) {
+      console.error('Chat join failed:', err.message);
+      setChatMessages((prev) => [...prev, { from: 'system', text: `Chat unavailable: ${err.message}`, ts: Date.now() }]);
+    }
+  }, []);
+
+  const sendChat = useCallback(() => {
+    const text = chatInput.trim();
+    if (!text) return;
+    chatRef.current?.sendMessage(text);
+    setChatInput('');
+  }, [chatInput]);
+
+  const toggleChatMic = useCallback(async () => {
+    const next = !micOn;
+    const ok = await chatRef.current?.toggleMic(next);
+    setMicOn(next && ok !== false);
+  }, [micOn]);
+
+  useEffect(() => () => { chatRef.current?.leave(); clearTimeout(typingTimer.current); }, []);
 
   const toggleMute = useCallback(() => {
     const audible = streamRef.current?.toggleAudio();
@@ -480,6 +541,67 @@ const App = () => {
             >
               I'm still here
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Chat (voice/text) — shown when the project has chat enabled */}
+      {chatAvailable && !isLoading && (
+        <button
+          onClick={() => (chatOpen ? setChatOpen(false) : openChat())}
+          title="Chat"
+          style={{
+            position: 'fixed', bottom: 20, left: 20, zIndex: 10010,
+            width: 44, height: 44, borderRadius: 22, border: 'none', cursor: 'pointer',
+            background: chatOpen ? LOADING_CONFIG.accentColor : 'rgba(20,20,26,.85)',
+            color: '#fff', fontSize: 20,
+          }}
+        >
+          💬
+        </button>
+      )}
+      {chatOpen && (
+        <div
+          style={{
+            position: 'fixed', bottom: 74, left: 20, zIndex: 10010, width: 300,
+            maxHeight: '55vh', display: 'flex', flexDirection: 'column',
+            background: 'rgba(16,16,20,.95)', border: '1px solid #2c2c34',
+            borderRadius: 12, color: '#e8e8ec', font: '13px/1.5 system-ui, sans-serif',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid #26262e' }}>
+            <strong style={{ flex: 1 }}>
+              Chat {chatJoined ? `· ${1 + roster.remoteParticipants.length} online` : '· joining…'}
+            </strong>
+            <button
+              onClick={toggleChatMic}
+              title={micOn ? 'Mute mic' : 'Unmute mic'}
+              style={{ border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
+                background: micOn ? LOADING_CONFIG.accentColor : '#3a3a42', color: '#fff' }}
+            >
+              {micOn ? '🎙' : '🔇'}
+            </button>
+            <button onClick={() => setChatOpen(false)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 16 }}>×</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {chatMessages.length === 0 && <span style={{ opacity: .5 }}>No messages yet.</span>}
+            {chatMessages.map((m, i) => (
+              <div key={i}>
+                <span style={{ color: m.from === 'You' ? LOADING_CONFIG.accentColor : '#9ab', fontWeight: 600 }}>{m.from}</span>{' '}
+                <span>{m.text}</span>
+              </div>
+            ))}
+            {someoneTyping && <span style={{ opacity: .5, fontStyle: 'italic' }}>someone is typing…</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 6, padding: 10, borderTop: '1px solid #26262e' }}>
+            <input
+              value={chatInput}
+              onChange={(e) => { setChatInput(e.target.value); chatRef.current?.sendTyping(); }}
+              onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') sendChat(); }}
+              placeholder="Message…"
+              style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #3a3a42', background: '#101014', color: '#eee', outline: 'none' }}
+            />
+            <button onClick={sendChat} style={{ border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', background: LOADING_CONFIG.accentColor, color: '#fff' }}>Send</button>
           </div>
         </div>
       )}

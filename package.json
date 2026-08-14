@@ -5,6 +5,7 @@
   "private": true,
   "license": "MIT",
   "dependencies": {
+    "@streampixel/core": "file:vendor/streampixel-core-2.0.0-alpha.0.tgz",
     "browserify-zlib": "^0.2.0",
     "crypto-browserify": "^3.12.1",
     "https-browserify": "^1.0.0",
@@ -15,8 +16,7 @@
     "react-dom": "^18.3.1",
     "react-scripts": "^5.0.1",
     "stream-browserify": "^3.0.0",
-    "stream-http": "^3.2.0",
-    "@streampixel/core": "file:vendor/streampixel-core-2.0.0-alpha.0.tgz"
+    "stream-http": "^3.2.0"
   },
   "scripts": {
     "start": "react-scripts start",
