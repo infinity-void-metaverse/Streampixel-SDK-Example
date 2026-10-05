@@ -299,6 +299,19 @@ const App = () => {
     stream.on('ueMessage', (message) => {
       // Handle custom UE → Web messages here
       // const data = JSON.parse(message);
+
+      if (message.includes("requestScreenshot")) handleScreenshot();
+
+      if (message.includes('https')) {
+        try {
+          const url = new URL(message.trim());
+          if (url.protocol === 'https:') {
+            window.open(url.href, '_blank', 'noopener,noreferrer');
+          }
+        } catch (_) {  }
+      }
+
+
     });
   }, []);
 
