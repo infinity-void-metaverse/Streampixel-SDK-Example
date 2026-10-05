@@ -113,7 +113,7 @@ const App = () => {
   const [showDevTools, setShowDevTools] = useState(false);
   const [consoleCmd, setConsoleCmd] = useState('stat fps');
   const [uiInteractionJson, setUiInteractionJson] = useState('{"type":"setColor","value":"red"}');
-
+  let filledBars = 0;
   /* =====================================================================
      Parse project ID and query params from URL
      ===================================================================== */
@@ -313,7 +313,27 @@ const App = () => {
 
 
     });
+
+
+  
+    stream.addEventListener('videoEncoderAvgQP', (qp) => {
+      const avgQP = qp.data.avgQP;
+      /*
+
+if (avgQp > 0) {
+    if (avgQp <= 20) filledBars = 4;
+    else if (avgQp <= 26) filledBars = 3;
+    else if (avgQp <= 35) filledBars = 2;
+    else filledBars = 1;
+  }
+
+      */
+
+    })
+
   }, []);
+
+
 
   useEffect(() => {
     if (!projectId) return;
