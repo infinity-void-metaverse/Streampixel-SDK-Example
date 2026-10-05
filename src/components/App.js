@@ -318,6 +318,7 @@ const App = () => {
   
     stream.addEventListener('videoEncoderAvgQP', (qp) => {
       const avgQP = qp.data.avgQP;
+      console.log("AVGQP:",avgQP);
       /*
 
 if (avgQp > 0) {
