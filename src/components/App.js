@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { StreamPixel, AuthError, SDK_VERSION } from '@streampixel/web-sdk';
+import { StreamPixel, AuthError, EngineLoadError, SDK_VERSION } from '@streampixel/web-sdk';
 import { VoiceChat } from '@streampixel/web-sdk/voice';
 
 /* =========================================================================
-   Streampixel SDK v2 example — @streampixel/core
+   Streampixel Web SDK v2 example — @streampixel/web-sdk
 
-   Core is HEADLESS: it exposes typed state/events and paints nothing
-   (except the optional built-in `loading: true` overlay, unused here).
-   Everything you see in this file's render tree is example UI you own —
-   copy it, restyle it, or replace it.
+   The SDK draws nothing except the video. It gives your code one `stream`
+   object with typed states, events and errors. Everything you see in this
+   file's render tree is example UI you own: copy it, restyle it, or
+   replace it. (For ready-made screens instead, see @streampixel/ui.)
+
+   Full reference: the README of @streampixel/web-sdk.
    ========================================================================= */
 const SHOW_DEV_TOOLS = true;
 
@@ -21,48 +23,138 @@ const LOADING_CONFIG = {
   logoUrl: null, // e.g. '/Images/logo.png'
   title: 'Connecting to Stream',
   subtitle: 'Please wait while we set up your experience...',
-  disconnectedSubtitle: 'The stream session has ended.',
   queueMessage: (position) => `You are in queue at position ${position}`,
   showSpinner: true,
 
   statusMessages: {
     initializing: 'Initializing...',
-    resolving: 'Authorizing session...',
-    connecting: 'Establishing WebRTC connection...',
-    inQueue: 'Waiting in queue...',
-    starting: 'Starting your application...',
-    streaming: 'Starting video playback...',
-    stalled: 'Stream stalled — recovering...',
-    recovering: 'Restarting the stream...',
-    reconnecting: 'Reconnecting to stream...',
-    failed: 'Connection failed. Please try again.',
-    disconnected: 'Disconnected from stream.',
+    preparing: 'Preparing your session...',          // StreamPixel.create() is running
+    connecting: 'Connecting to your application...', // states `idle` and `connecting`
+    inQueue: 'Waiting in queue...',                  // state `queued`
+    // The `progress` event tells the steps inside `connecting` apart:
+    offer: 'Your application answered. Setting up the video...',
+    answer: 'Establishing the video connection...',
+    connected: 'Connected. Waiting for the first frame...',
+    recovering: 'Restarting the stream...',          // state `recovering`
+    reconnecting: 'Reconnecting to stream...',       // state `reconnecting`
+    waitingForHost: 'Waiting for the host...',       // `reconnecting` with waitingForHost (shared-session viewer)
   },
 
   reconnectingTitle: 'Reconnecting',
   reconnectingSubtitle: 'Please wait while we restore your session...',
-  reconnectFailedTitle: 'Reconnection Failed',
-  reconnectFailedSubtitle: 'We were unable to restore your session.',
+  endedTitle: 'Session Ended',
+  unavailableTitle: 'Stream Unavailable',
 };
 
-/* Map core's typed state machine onto the loading screen. */
+/* Map the SDK's states, and the steps of the `progress` event, onto the progress bar. */
 const PROGRESS_BY_STATE = {
-  resolving: 10,
+  idle: 10,
   queued: 15,
-  starting: 25,
-  connecting: 45,
+  connecting: 30,
   streaming: 100,
+  awaitingPlay: 100,
   recovering: 20,
   reconnecting: 20,
 };
+const PROGRESS_BY_STAGE = { offer: 55, answer: 70, connected: 85 };
+
+/* This example's URL parameters (see the README). Production is the default. */
+function readUrlOptions() {
+  const params = new URLSearchParams(window.location.search);
+  // ?platform=staging opts in to the staging control plane, for SDK development.
+  const staging = params.get('platform') === 'staging';
+  // Shared session: ?shared=host, or ?shared=viewer&hostStreamerId=<id>
+  const sharedParam = params.get('shared');
+  const hostStreamerId = params.get('hostStreamerId');
+  return {
+    platformHost: staging ? 'https://platform.staging.streampixel.io' : undefined,
+    telemetryHost: staging ? 'https://telemetry.staging.streampixel.io' : undefined,
+    shared:
+      sharedParam === 'host'
+        ? { role: 'host' }
+        : sharedParam === 'viewer' && hostStreamerId
+          ? { role: 'viewer', hostStreamerId }
+          : undefined,
+    streamerId: params.get('streamerId') || undefined,
+    // ?engine=beta runs the next engine release instead of the stable one.
+    engine: params.get('engine') === 'beta' ? { channel: 'beta' } : undefined,
+  };
+}
+
+/* What to tell the viewer when StreamPixel.create() rejects.
+   `retry` offers a "Try again" button; `signInUrl` a "Sign in again" button. */
+function describeCreateError(err) {
+  if (err instanceof AuthError) {
+    switch (err.kind) {
+      case 'project-offline':
+        return { subtitle: 'This stream is unavailable right now.', retry: true };
+      case 'project-not-found':
+        return { subtitle: 'This stream does not exist. Check the project id in the link.' };
+      case 'rate-limited':
+        return { subtitle: `Too many attempts. Try again in ${err.retryAfterSec ?? 60} seconds.`, retry: true };
+      case 'network':
+        return { subtitle: 'Could not reach Streampixel. Check your connection.', retry: true };
+      case 'sso-required':
+        // Single sign-on: the SDK is already sending the browser to the sign-in page.
+        return { title: 'Signing in', subtitle: 'Taking you to the sign-in page...' };
+      case 'sso-failed':
+        // err.message is a sentence for the viewer; err.ssoStartUrl starts the sign-in again.
+        return { subtitle: err.message, status: err.ssoErrorCode, signInUrl: err.ssoStartUrl };
+      case 'server-ticket-required':
+        // "Your app only": the project's owner must request a ticket on their server
+        // and pass the whole response as auth: { mode: 'ticket', ticket }.
+        return {
+          subtitle: 'This stream can only be opened from its owner\'s own application.',
+          status: 'Project access is "Your app only": a server ticket is required.',
+        };
+      case 'shared-room-taken':
+        return { subtitle: 'This shared session already has a host.' };
+      default:
+        // A newer engine may add a kind. err.status is the HTTP status, when there was one.
+        return { subtitle: err.message, status: `${err.kind}${err.status ? ` (HTTP ${err.status})` : ''}`, retry: true };
+    }
+  }
+  if (err instanceof EngineLoadError) {
+    // The engine is downloaded by create(); err.reason says why that failed
+    // (offline, an ad blocker, a Content-Security-Policy that does not allow the hosts, ...).
+    return { subtitle: 'The player could not be loaded.', status: `Reason: ${err.reason}`, retry: true };
+  }
+  // TypeError: an option passed to create() is wrong. The message names it.
+  return { subtitle: err?.message || 'The stream could not be started.' };
+}
+
+/* The line under the password form, from the fields of the `awaitingPassword` state. */
+function passwordMessage(gate) {
+  if (gate.hard) {
+    // Every attempt is refused for now: the form is disabled until the wait is over.
+    return `Too many attempts. Try again in ${gate.retryAfterSec ?? 60} seconds.`;
+  }
+  if (gate.locked) {
+    // Too many wrong attempts. The right password is still accepted: the form stays usable.
+    return 'Too many wrong attempts. Check the password before you try again.';
+  }
+  if (gate.wrong) return 'Incorrect password. Please try again.';
+  return '';
+}
+
+function hostOf(url) {
+  try {
+    return new URL(url).host;
+  } catch (_) {
+    return url;
+  }
+}
 
 const App = () => {
-  const streamRef = useRef(null);      // the StreamPixel instance
-  const videoRef = useRef(null);       // container core attaches <video> into
+  const streamRef = useRef(null);      // the current stream (StreamPixel.create() result)
+  const videoRef = useRef(null);       // the container the SDK puts its <video> in
   const latestStats = useRef(null);    // updated every second by the stats event
 
   // URL-derived config
   const [projectId, setProjectId] = useState(null);
+  // `ended` is final: to start again, the old stream is destroyed and a new one
+  // created. Changing this number re-runs the effect that does both.
+  const [runId, setRunId] = useState(0);
 
   // Loading state
   const [isLoading, setIsLoading] = useState(true);
@@ -71,11 +163,17 @@ const App = () => {
   const [queuePosition, setQueuePosition] = useState(null);
   const [loadingStatus, setLoadingStatus] = useState(LOADING_CONFIG.statusMessages.initializing);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingAction, setLoadingAction] = useState(null); // a button on the card: { label, run }
 
-  // Password gate (AuthError → this form → retry with auth: password)
-  const [needsPassword, setNeedsPassword] = useState(false);
+  // Password gate: the `awaitingPassword` state (fields wrong, locked, hard,
+  // retryAfterSec) while the stream waits for submitPassword(); null otherwise.
+  const [passwordGate, setPasswordGate] = useState(null);
   const [password, setPassword] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+
+  // The browser blocked autoplay (state `awaitingPlay`): show "Click to start".
+  const [needsPlay, setNeedsPlay] = useState(false);
 
   // Controls state
   const [isMuted, setIsMuted] = useState(true);
@@ -96,8 +194,13 @@ const App = () => {
   // On-screen keyboard (UE text fields): null = closed, string = current text
   const [oskText, setOskText] = useState(null);
 
-  // Chat (voice/text via @streampixel/core/voice) — available when the ticket
-  // carried a voiceToken, i.e. the project has chat enabled in the dashboard.
+  // Notices raised by events: `relayFallback`, `openUrl`, `fileProgress` / `file`
+  const [relayNotice, setRelayNotice] = useState(null);   // 'tcp' | 'tls'
+  const [linkPrompt, setLinkPrompt] = useState(null);     // { url, open }
+  const [fileTransfer, setFileTransfer] = useState(null); // { name, percent } while arriving, { name, blob } when complete
+
+  // Chat (voice/text via @streampixel/web-sdk/voice): available when the project
+  // has chat switched on in the dashboard (stream.voiceToken is then set).
   const chatRef = useRef(null);
   const [chatAvailable, setChatAvailable] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -113,9 +216,11 @@ const App = () => {
   const [showDevTools, setShowDevTools] = useState(false);
   const [consoleCmd, setConsoleCmd] = useState('stat fps');
   const [uiInteractionJson, setUiInteractionJson] = useState('{"type":"setColor","value":"red"}');
+  const [devNote, setDevNote] = useState('');           // result of the last send / console command
+  const [sessionInfo, setSessionInfo] = useState(null); // { engineVersion, sessionId, streamerId }
 
   /* =====================================================================
-     Parse project ID and query params from URL
+     Parse project ID from the URL: /<projectId> or /?appId=<projectId>
      ===================================================================== */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -123,190 +228,305 @@ const App = () => {
     setProjectId(params.get('appId') || pathId || null);
   }, []);
 
-  /* =====================================================================
-     Start (or restart) a session. `authOverride` carries the password
-     retry; everything else re-reads the URL.
-     ===================================================================== */
-  const startStream = useCallback(async (id, authOverride) => {
-    const params = new URLSearchParams(window.location.search);
-    // PRODUCTION by default (the SDK's own defaults). ?platform=staging opts in
-    // to the staging control plane for SDK development.
-    const staging = params.get('platform') === 'staging';
-    const platformHost = staging ? 'https://platform.staging.streampixel.io' : undefined;
-    const telemetryHost = staging ? 'https://telemetry.staging.streampixel.io' : undefined;
+  const restart = useCallback(() => setRunId((n) => n + 1), []);
 
-    // Shared (SFU) viewing: ?shared=host, or ?shared=viewer&hostStreamerId=<id>
-    const sharedParam = params.get('shared');
-    const shared =
-      sharedParam === 'host'
-        ? { role: 'host' }
-        : sharedParam === 'viewer' && params.get('hostStreamerId')
-          ? { role: 'viewer', hostStreamerId: params.get('hostStreamerId') }
-          : undefined;
-
-    setNeedsPassword(false);
+  /* A final card on the loading screen: the session ended, or create() failed. */
+  const showFinalCard = useCallback(({ title, subtitle, status = '', action = null }) => {
     setIsLoading(true);
-    setLoadingTitle(LOADING_CONFIG.title);
-    setLoadingSubtitle(LOADING_CONFIG.subtitle);
-    setLoadingStatus(LOADING_CONFIG.statusMessages.resolving);
-    setLoadingProgress(10);
+    setLoadingProgress(0); // hides the spinner and the progress bar
+    setQueuePosition(null);
+    setLoadingTitle(title);
+    setLoadingSubtitle(subtitle);
+    setLoadingStatus(status);
+    setLoadingAction(action);
+  }, []);
 
-    let stream;
-    try {
-      /* ─────────────────────────────────────────────────────────────────
-         StreamPixel.create() — one call resolves access, mints the
-         session ticket, and starts connecting. All stream behaviour
-         (codec, resolution, inputs, AFK) defaults to your dashboard
-         config; pass options only to override it.
-         ───────────────────────────────────────────────────────────────── */
-      stream = await StreamPixel.create({
-        appId: id,
-        container: videoRef.current,
-        auth: authOverride, // undefined = auto; {mode:'password'} on retry
-        shared,
-        advanced: {
-          platformHost,
-          telemetryHost,
-          streamerId: params.get('streamerId') || undefined,
-        },
-        // codec:      { primary: 'AV1', fallback: 'H264' },
-        // resolution: { start: '1080p (1920x1080)', mode: 'dynamic' },
-        // bitrate:    { min: 1_000_000, max: 20_000_000 },
-        // input:      { mouse: true, keyboard: true, touch: true },
-        // media:      { mic: false, camera: false },
-        // afk:        { timeoutSec: 300 },
-        // telemetry:  'standard',
-      });
-    } catch (err) {
-      if (err instanceof AuthError && (err.kind === 'password-required' || err.kind === 'password-wrong')) {
-        setNeedsPassword(true);
-        setPasswordError(err.kind === 'password-wrong' ? 'Incorrect password. Please try again.' : '');
-        setLoadingProgress(0);
-        return;
-      }
-      // sso-required with auth:auto auto-redirects to the IdP before throwing,
-      // so reaching here for SSO means the page is already navigating away.
-      setLoadingTitle('Stream Unavailable');
-      setLoadingSubtitle(err.message || 'The link may be incorrect, expired, or no longer active.');
-      setLoadingStatus(LOADING_CONFIG.statusMessages.failed);
-      setLoadingProgress(0);
-      return;
-    }
-
-    streamRef.current = stream;
-    window.spStream = stream; // handy for the browser console
-    setChatAvailable(!!stream.voiceToken);
-
-    // The dashboard's allowed ladder → the quality picker.
-    setResolutionOptions([
-      { label: 'Auto (Dashboard)', value: null },
-      ...stream.allowedResolutions.map((r) => ({ label: r.split(' ')[0], value: r })),
-    ]);
-
-    /* ─── State machine → loading screen ─────────────────────────────── */
-    stream.on('state', (s) => {
+  /* =====================================================================
+     Listen to a stream. Returns the function that removes every listener.
+     ===================================================================== */
+  const subscribe = useCallback((stream) => {
+    /* ─── States → loading screen, password form, "Click to start" ───── */
+    const onState = (s) => {
       const progress = PROGRESS_BY_STATE[s.kind];
       if (progress !== undefined) setLoadingProgress(progress);
+      setPasswordGate(s.kind === 'awaitingPassword' ? s : null);
+      setNeedsPlay(s.kind === 'awaitingPlay');
 
       switch (s.kind) {
-        case 'streaming':
-          setTimeout(() => {
-            setIsLoading(false);
-            setQueuePosition(null);
-            setLoadingTitle(LOADING_CONFIG.title);
-            setLoadingSubtitle(LOADING_CONFIG.subtitle);
-          }, 300);
+        case 'idle':       // create() has resolved; connecting starts in a moment
+        case 'connecting': // also after the queue, and while a connection is rebuilt
+          setQueuePosition(null);
+          setLoadingStatus(LOADING_CONFIG.statusMessages.connecting);
+          break;
+        case 'awaitingPassword':
+          // A password project: nothing has started. The form below answers
+          // with stream.submitPassword().
           break;
         case 'queued':
           setLoadingStatus(LOADING_CONFIG.statusMessages.inQueue);
           break;
-        case 'connecting':
-          setLoadingStatus(LOADING_CONFIG.statusMessages.connecting);
+        case 'streaming':
+          setIsLoading(false);
+          setLoadingTitle(LOADING_CONFIG.title);
+          setLoadingSubtitle(LOADING_CONFIG.subtitle);
+          setIsMuted(stream.muted); // streams start muted
+          // Known once the stream has its ticket (on a password project: after the password).
+          setChatAvailable(!!stream.voiceToken);
+          setResolutionOptions([
+            { label: 'Auto (Dashboard)', value: null },
+            ...stream.allowedResolutions.map((r) => ({ label: r.split(' ')[0], value: r })),
+          ]);
+          break;
+        case 'awaitingPlay':
+          // The stream is up and the browser refused to play it without a user
+          // gesture: the "Click to start" overlay calls stream.play().
+          setIsLoading(false);
           break;
         case 'recovering':
+          // No video arrived: the SDK is starting one fresh session.
           setIsLoading(true);
           setLoadingStatus(LOADING_CONFIG.statusMessages.recovering);
           break;
         case 'reconnecting':
+          // The connection dropped: the SDK restores it until s.deadlineMs.
           setIsLoading(true);
-          setIsMuted(true);
           setLoadingTitle(LOADING_CONFIG.reconnectingTitle);
           setLoadingSubtitle(LOADING_CONFIG.reconnectingSubtitle);
-          setLoadingStatus(LOADING_CONFIG.statusMessages.reconnecting);
+          setLoadingStatus(
+            s.waitingForHost
+              ? LOADING_CONFIG.statusMessages.waitingForHost
+              : LOADING_CONFIG.statusMessages.reconnecting
+          );
           break;
-        default:
+        case 'ended': // final: the `ended` event below shows the card
+        default:      // a newer engine may add a kind
           break;
       }
-    });
+    };
 
-    stream.on('queue', ({ position }) => setQueuePosition(position));
+    const offs = [
+      stream.on('state', onState),
 
-    /* ─── Session end — code + endKind tell you what to say ──────────── */
-    stream.on('ended', ({ code, reason, endKind }) => {
-      setIsLoading(true);
-      setLoadingProgress(0);
-      setQueuePosition(null);
-      setAfkWarning(false);
-      if (endKind === 'afk') {
-        setLoadingTitle('Session Ended');
-        setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
-        setLoadingStatus('You were disconnected due to inactivity.');
-      } else if (code === 4007) {
-        setLoadingTitle(LOADING_CONFIG.reconnectFailedTitle);
-        setLoadingSubtitle(LOADING_CONFIG.reconnectFailedSubtitle);
-        setLoadingStatus(LOADING_CONFIG.statusMessages.failed);
-      } else if (endKind === 'network-blocked') {
-        setLoadingTitle('Network Blocked');
-        setLoadingSubtitle(reason);
-        setLoadingStatus(LOADING_CONFIG.statusMessages.failed);
-      } else {
-        setLoadingTitle('Disconnected');
-        setLoadingSubtitle(reason || LOADING_CONFIG.disconnectedSubtitle);
-        setLoadingStatus(`${LOADING_CONFIG.statusMessages.disconnected} (code ${code})`);
-      }
-    });
+      /* ─── Loading steps inside `connecting` ──────────────────────────── */
+      stream.on('progress', ({ stage }) => {
+        if (PROGRESS_BY_STAGE[stage] !== undefined) setLoadingProgress(PROGRESS_BY_STAGE[stage]);
+        if (LOADING_CONFIG.statusMessages[stage]) setLoadingStatus(LOADING_CONFIG.statusMessages[stage]);
+      }),
 
-    /* ─── Live stats (1s cadence) — rendered when the popup is open ──── */
-    stream.on('stats', (s) => {
-      latestStats.current = {
-        FPS: s.fps,
-        'Latency (ms)': s.latencyMs,
-        Resolution: s.resolution ?? '—',
-        Codec: s.codec ?? '—',
-        'Bitrate (kbps)': s.bitrateKbps ?? '—',
-        'Frames Decoded': s.framesDecoded,
-        'Frames Dropped': s.framesDropped,
-        Relay: s.relayTransport || 'direct',
-      };
-    });
+      stream.on('queue', ({ position }) => setQueuePosition(position)),
 
-    /* ─── AFK countdown ──────────────────────────────────────────────── */
-    stream.on('afkWarning', (w) => {
-      if (w.kind === 'countdown') {
-        setAfkWarning(true);
-        setAfkCountdown(w.secondsRemaining);
-        dismissAfkRef.current = w.dismiss;
-      } else {
+      /* ─── Session ids ────────────────────────────────────────────────── */
+      // The ids shown in your Streampixel analytics: store them to link a session
+      // to your own user. Fires again with new ids when the SDK recovers into a
+      // fresh session.
+      stream.on('session', ({ sessionId, streamerId }) => {
+        setSessionInfo((info) => ({ ...info, sessionId, streamerId }));
+      }),
+
+      /* ─── Session end ────────────────────────────────────────────────── */
+      // `message` is the sentence for the viewer. code, reason and endKind are
+      // for your logs and for support.
+      stream.on('ended', ({ code, reason, endKind, message }) => {
+        console.info('[ended]', { code, reason, endKind });
         setAfkWarning(false);
-        dismissAfkRef.current = null;
-      }
-    });
+        setOskText(null);
+        setRelayNotice(null);
+        setLinkPrompt(null);
+        setFileTransfer(null);
+        setChatOpen(false); // the chat leaves by itself when the stream ends
+        showFinalCard({
+          title: LOADING_CONFIG.endedTitle,
+          subtitle: message,
+          status: `Code ${code}`,
+          // `ended` is final. "Start again" destroys this stream and creates a new one.
+          action: { label: 'Start again', run: restart },
+        });
+      }),
 
-    /* ─── On-screen keyboard: UE focused a text field ────────────────── */
-    stream.on('osk', ({ contents }) => setOskText(contents ?? ''));
+      /* ─── Live stats (1s cadence), rendered when the popup is open ───── */
+      // `?? '—'`: the engine is downloaded, and an older one may not send a field.
+      stream.on('stats', (s) => {
+        latestStats.current = {
+          FPS: s.fps,
+          'Latency (ms)': s.latencyMs,
+          Resolution: s.resolution ?? '—',
+          Codec: s.codec ?? '—',
+          'Bitrate (kbps)': s.bitrateKbps ?? '—',
+          'Encoder QP': s.avgQp ?? '—',
+          'Frames Decoded': s.framesDecoded,
+          'Frames Dropped': s.framesDropped,
+          'Packets Lost': s.packetsLost ?? '—',
+          'Received (MB)': s.bytesReceived == null ? '—' : (s.bytesReceived / 1e6).toFixed(1),
+          Relay: s.relayTransport || 'direct',
+        };
+      }),
 
-    /* ─── UE → Web messages ──────────────────────────────────────────── */
-    stream.on('ueMessage', (message) => {
-      // Handle custom UE → Web messages here
-      // const data = JSON.parse(message);
-    });
-  }, []);
+      /* ─── No video: the SDK recovers by itself (state `recovering`) ──── */
+      stream.on('stalled', (diagnostics) => console.warn('[stalled]', diagnostics.verdict)),
 
+      /* ─── Relay fallback ─────────────────────────────────────────────── */
+      // UDP is blocked on the viewer's network and the stream is relayed over TCP
+      // or TLS, at lower quality. showWarning is the project's dashboard setting.
+      stream.on('relayFallback', ({ transport, showWarning }) => {
+        if (showWarning) setRelayNotice(transport || 'tcp');
+      }),
+
+      /* ─── AFK countdown ──────────────────────────────────────────────── */
+      stream.on('afkWarning', (w) => {
+        if (w.kind === 'countdown') {
+          setAfkWarning(true);
+          setAfkCountdown(w.secondsRemaining);
+          dismissAfkRef.current = w.dismiss;
+        } else {
+          setAfkWarning(false);
+          dismissAfkRef.current = null;
+        }
+      }),
+
+      /* ─── On-screen keyboard: UE focused a text field, or closed it ──── */
+      stream.on('osk', ({ contents }) => setOskText(contents ?? '')),
+      stream.on('oskHide', () => setOskText(null)),
+
+      /* ─── The application sent a plain https link ────────────────────── */
+      // Phones and tablets only open a tab from a tap: show a button that calls open().
+      stream.on('openUrl', (link) => setLinkPrompt(link)),
+
+      /* ─── The application sent a file ────────────────────────────────── */
+      stream.on('fileProgress', ({ received, total, name }) => {
+        setFileTransfer({ name: name || 'file', percent: total ? Math.round((received / total) * 100) : 0 });
+      }),
+      stream.on('file', ({ blob, name }) => setFileTransfer({ name: name || 'download', blob })),
+
+      /* ─── UE → Web messages ──────────────────────────────────────────── */
+      stream.on('ueMessage', (message) => {
+        // Handle custom UE → Web messages here. Usually a JSON string:
+        // const data = JSON.parse(message);
+        //
+        // The SDK already acts on a few: a plain https link raises `openUrl`
+        // (above), and `requestScreenshot` raises `screenshot`. This app has no
+        // `screenshot` listener, so the SDK downloads the frame as a PNG.
+      }),
+    ];
+
+    // create() resolves already in `awaitingPassword` on a password project: render the current state now.
+    onState(stream.state);
+
+    return () => offs.forEach((off) => off());
+  }, [restart, showFinalCard]);
+
+  /* =====================================================================
+     Start a stream; stop it when the component unmounts or restarts.
+
+     React runs this effect twice in development (<StrictMode>), and a fast
+     route change can unmount a component before create() has resolved. The
+     AbortSignal covers both: aborted before create() resolves, nothing
+     starts; aborted afterwards, the stream is destroyed. Without it, a
+     session would keep streaming with nobody watching.
+     ===================================================================== */
   useEffect(() => {
-    if (!projectId) return;
-    startStream(projectId);
-    return () => streamRef.current?.disconnect();
-  }, [projectId, startStream]);
+    if (!projectId) return undefined;
+    const url = readUrlOptions();
+    const ac = new AbortController();
+    let stream = null;
+    let unsubscribe = null;
+
+    setIsLoading(true);
+    setLoadingTitle(LOADING_CONFIG.title);
+    setLoadingSubtitle(LOADING_CONFIG.subtitle);
+    setLoadingStatus(LOADING_CONFIG.statusMessages.preparing);
+    setLoadingProgress(5);
+    setLoadingAction(null);
+
+    /* ───────────────────────────────────────────────────────────────────
+       StreamPixel.create() downloads the engine, looks the project up,
+       asks for the session ticket and resolves with the stream. Only
+       `appId` is needed: codec, resolution, inputs and idle time default
+       to the project's dashboard settings. Pass an option to change one.
+       ─────────────────────────────────────────────────────────────────── */
+    StreamPixel.create({
+      appId: projectId,
+      container: videoRef.current,
+      signal: ac.signal,
+      shared: url.shared,
+      engine: url.engine,
+      advanced: {
+        platformHost: url.platformHost,
+        telemetryHost: url.telemetryHost,
+        streamerId: url.streamerId,
+      },
+      // auth:         { mode: 'ticket', ticket }, // "Your app only": the WHOLE response of your server's ticket request
+      // codec:        { primary: 'AV1', fallback: 'H264' },
+      // resolution:   { start: '1080p (1920x1080)', mode: 'dynamic' },
+      // bitrate:      { min: 1_000, max: 20_000 }, // kilobits per second: 1 to 20 Mbps
+      // input:        { mouse: true, keyboard: true, touch: true },
+      // media:        { mic: false, camera: false },
+      // launchParams: { unit: 'A-12', lang: 'fr' },
+      // afk:          { timeoutSec: 300 },
+      // telemetry:    'standard',
+    })
+      .then((created) => {
+        if (ac.signal.aborted) return;
+        stream = created;
+        streamRef.current = stream;
+        window.spStream = stream; // handy for the browser console
+        setSessionInfo({ engineVersion: stream.engineVersion });
+        // Attach listeners directly after create(): `session` and the first
+        // `connecting` fire one moment later.
+        unsubscribe = subscribe(stream);
+      })
+      .catch((err) => {
+        // The cleanup below aborted `signal` (create() rejects with AbortError): nothing started.
+        if (ac.signal.aborted || err?.name === 'AbortError') return;
+        console.error('[create]', err);
+        const { title, subtitle, status, retry, signInUrl } = describeCreateError(err);
+        let action = null;
+        if (signInUrl) action = { label: 'Sign in again', run: () => window.location.assign(signInUrl) };
+        else if (retry) action = { label: 'Try again', run: restart };
+        showFinalCard({ title: title || LOADING_CONFIG.unavailableTitle, subtitle, status, action });
+      });
+
+    return () => {
+      unsubscribe?.();   // destroy() announces `ended` before it drops listeners: stop listening first
+      ac.abort();        // before create() resolves: nothing starts. After: the stream is destroyed.
+      stream?.destroy(); // a stream that has already ended no longer follows the signal; safe to call twice
+      streamRef.current = null;
+
+      // Forget what belonged to that stream.
+      chatRef.current?.leave().catch(() => {});
+      chatRef.current = null;
+      latestStats.current = null;
+      dismissAfkRef.current = null;
+      setChatAvailable(false);
+      setChatOpen(false);
+      setChatJoined(false);
+      setChatMessages([]);
+      setMicOn(false);
+      setPasswordGate(null);
+      setPasswordError('');
+      setNeedsPlay(false);
+      setAfkWarning(false);
+      setOskText(null);
+      setRelayNotice(null);
+      setLinkPrompt(null);
+      setFileTransfer(null);
+      setStatsData(null);
+      setSessionInfo(null);
+      setDevNote('');
+      setResolutionOptions([]);
+      setCurrentResolution('Auto (Dashboard)');
+    };
+  }, [projectId, runId, subscribe, showFinalCard, restart]);
+
+  // Hard lockout on the password form: every attempt is refused for now.
+  // Clear it when the wait is over, so the form can be used again.
+  useEffect(() => {
+    if (!passwordGate?.hard) return undefined;
+    const timer = setTimeout(
+      () => setPasswordGate((gate) => (gate ? { kind: 'awaitingPassword' } : gate)),
+      (passwordGate.retryAfterSec ?? 60) * 1000
+    );
+    return () => clearTimeout(timer);
+  }, [passwordGate]);
 
   /* =====================================================================
      Event Handlers
@@ -315,11 +535,25 @@ const App = () => {
   const handlePasswordSubmit = useCallback(
     (e) => {
       e.preventDefault();
-      if (!password) return;
-      startStream(projectId, { mode: 'password', password });
+      const stream = streamRef.current;
+      if (!stream || !password || passwordBusy) return;
+      setPasswordBusy(true);
+      setPasswordError('');
+      // Resolves for a right AND for a wrong password: the `awaitingPassword`
+      // state says which (wrong / locked / hard). Rejects with AuthError for a
+      // network error or a project that went offline; the state stays as it was.
+      stream
+        .submitPassword(password)
+        .catch((err) => setPasswordError(err.message))
+        .finally(() => setPasswordBusy(false));
     },
-    [projectId, password, startStream]
+    [password, passwordBusy]
   );
+
+  // `awaitingPlay`: playback must start from a click or tap.
+  const handlePlay = useCallback(() => {
+    streamRef.current?.play();
+  }, []);
 
   const handleDismissAfk = useCallback(() => {
     dismissAfkRef.current?.();
@@ -330,17 +564,36 @@ const App = () => {
     setOskText(null);
   }, [oskText]);
 
+  // `openUrl`: open() must run inside this click.
+  const openLink = useCallback(() => {
+    linkPrompt?.open();
+    setLinkPrompt(null);
+  }, [linkPrompt]);
+
+  // `file`: save the Blob the application sent.
+  const saveFile = useCallback(() => {
+    if (!fileTransfer?.blob) return;
+    const url = URL.createObjectURL(fileTransfer.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileTransfer.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setFileTransfer(null);
+  }, [fileTransfer]);
+
   /* ─── Chat: lazy-join the project room on first open ────────────────── */
   const openChat = useCallback(async () => {
     setChatOpen(true);
-    if (chatRef.current || !streamRef.current) return;
+    const stream = streamRef.current;
+    if (chatRef.current || !stream) return;
     try {
-      const params = new URLSearchParams(window.location.search);
-      const chat = VoiceChat.for(streamRef.current, {
+      // VoiceChat.for() returns a Promise: the chat code is downloaded on first use.
+      const chat = await VoiceChat.for(stream, {
         userName: `Guest-${Math.floor(Math.random() * 1000)}`,
         voice: false, // join muted; mic is opt-in below
-        platformHost:
-          params.get('platform') === 'staging' ? 'https://platform.staging.streampixel.io' : undefined,
+        // Not taken from the stream: pass the same platform host here.
+        platformHost: readUrlOptions().platformHost,
       });
       chat.on('message', (m) =>
         setChatMessages((prev) => [...prev.slice(-99), { ...m, ts: Date.now() }])
@@ -353,6 +606,11 @@ const App = () => {
       });
       chat.on('deviceError', (e) => console.warn('[chat]', e.message));
       await chat.join();
+      if (streamRef.current !== stream) {
+        // The stream was replaced while the chat was joining.
+        chat.leave().catch(() => {});
+        return;
+      }
       chatRef.current = chat;
       setChatJoined(true);
     } catch (err) {
@@ -374,7 +632,7 @@ const App = () => {
     setMicOn(next && ok !== false);
   }, [micOn]);
 
-  useEffect(() => () => { chatRef.current?.leave(); clearTimeout(typingTimer.current); }, []);
+  useEffect(() => () => clearTimeout(typingTimer.current), []);
 
   const toggleMute = useCallback(() => {
     const audible = streamRef.current?.toggleAudio();
@@ -407,28 +665,47 @@ const App = () => {
   const toggleSettings = useCallback(() => setShowSettings((prev) => !prev), []);
 
   const handleResolutionChange = useCallback((option) => {
+    setShowSettings(false);
     if (option.value) {
       const match = option.value.match(/\((\d+)x(\d+)\)/);
-      if (match) streamRef.current?.setResolution(Number(match[1]), Number(match[2]));
+      // Returns the size that was sent (lowered to the project's maximum), or
+      // null when nothing was sent: no stream up, or a shared-session viewer
+      // (the size is the host's).
+      const applied = match && streamRef.current?.setResolution(Number(match[1]), Number(match[2]));
+      if (!applied) {
+        console.warn('[resolution] not applied:', option.value);
+        return;
+      }
     }
     setCurrentResolution(option.label);
-    setShowSettings(false);
   }, []);
 
   /* ─── Developer Tools Handlers ───────────────────────────────────── */
 
+  // send() and consoleCommand() return whether anything was sent. Nothing is
+  // queued: send again once the state is `streaming`.
   const handleConsoleCommand = useCallback((cmd) => {
-    streamRef.current?.consoleCommand(cmd);
+    const sent = streamRef.current?.consoleCommand(cmd);
+    setDevNote(
+      sent
+        ? `Sent: ${cmd}`
+        : 'Not sent. The stream is not up, or the application does not allow console commands (-AllowPixelStreamingCommands).'
+    );
   }, []);
 
   const handleSendToUE = useCallback((jsonStr) => {
+    let payload;
     try {
-      streamRef.current?.send(JSON.parse(jsonStr));
+      payload = JSON.parse(jsonStr);
     } catch (e) {
-      console.error('Invalid JSON:', e.message);
+      setDevNote(`Invalid JSON: ${e.message}`);
+      return;
     }
+    const sent = streamRef.current?.send(payload);
+    setDevNote(sent ? 'Sent to the application.' : 'Not sent. The stream is not up.');
   }, []);
 
+  // Ends the session for good: `ended` fires with code 1000 and endKind 'user'.
   const handleDisconnect = useCallback(() => {
     streamRef.current?.disconnect();
   }, []);
@@ -446,16 +723,17 @@ const App = () => {
     const diag = await streamRef.current?.getDiagnostics();
     console.log('[diagnostics]', diag);
     if (diag) window.alert(`Connection: ${diag.verdict}`);
+    else setDevNote('No connection to diagnose.');
   }, []);
 
   /* =====================================================================
-     Render — everything below is EXAMPLE UI. Core paints none of it.
+     Render — everything below is EXAMPLE UI. The SDK draws only the video.
      ===================================================================== */
   return (
     <div className="containMain">
 
-      {/* Password Gate */}
-      {needsPassword && (
+      {/* Password Gate — state `awaitingPassword`, answered with stream.submitPassword() */}
+      {passwordGate && (
         <div className="loading-overlay" style={{ backgroundColor: LOADING_CONFIG.backgroundColor }}>
           {LOADING_CONFIG.logoUrl && (
             <img src={LOADING_CONFIG.logoUrl} alt="Logo" className="loading-logo" />
@@ -467,23 +745,32 @@ const App = () => {
               type="password"
               value={password}
               autoFocus
+              disabled={passwordGate.hard === true}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
               style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid #333', background: '#101012', color: '#eee' }}
             />
             <button
               type="submit"
-              style={{ padding: '10px 16px', borderRadius: 6, border: 'none', background: LOADING_CONFIG.accentColor, color: '#fff', cursor: 'pointer' }}
+              disabled={passwordGate.hard === true || passwordBusy}
+              style={{
+                padding: '10px 16px', borderRadius: 6, border: 'none', background: LOADING_CONFIG.accentColor, color: '#fff',
+                cursor: 'pointer', opacity: passwordGate.hard === true || passwordBusy ? 0.6 : 1,
+              }}
             >
-              Join
+              {passwordBusy ? 'Checking...' : 'Join'}
             </button>
           </form>
-          {passwordError && <p className="loading-status" style={{ color: '#ff7b7b' }}>{passwordError}</p>}
+          {(passwordError || passwordMessage(passwordGate)) && (
+            <p className="loading-status" style={{ color: '#ff7b7b' }}>
+              {passwordError || passwordMessage(passwordGate)}
+            </p>
+          )}
         </div>
       )}
 
-      {/* Loading / Disconnected Screen */}
-      {isLoading && !needsPassword && (
+      {/* Loading / Ended / Unavailable Screen */}
+      {isLoading && !passwordGate && (
         <div className="loading-overlay" style={{ backgroundColor: LOADING_CONFIG.backgroundColor }}>
           {LOADING_CONFIG.logoUrl && (
             <img src={LOADING_CONFIG.logoUrl} alt="Logo" className="loading-logo" />
@@ -502,6 +789,15 @@ const App = () => {
             </div>
           )}
           <p className="loading-status">{loadingStatus}</p>
+          {loadingAction && (
+            <button
+              className="afk-btn"
+              style={{ backgroundColor: LOADING_CONFIG.accentColor, marginTop: 8 }}
+              onClick={loadingAction.run}
+            >
+              {loadingAction.label}
+            </button>
+          )}
           {queuePosition !== null && (
             <div className="loading-queue">
               <p className="loading-queue-text">{LOADING_CONFIG.queueMessage(queuePosition)}</p>
@@ -513,8 +809,58 @@ const App = () => {
         </div>
       )}
 
-      {/* Video Container — core attaches its <video> in here */}
+      {/* Video Container — the SDK puts its <video> in here. Keep it empty in
+          your JSX, and give it a width and a height (see index.css). */}
       <div id="videoElement" ref={videoRef} />
+
+      {/* Click to start — state `awaitingPlay`: the browser blocked autoplay */}
+      {needsPlay && (
+        <div className="afk-overlay" onClick={handlePlay}>
+          <div className="afk-card">
+            <h2 className="afk-title">Your stream is ready</h2>
+            <p className="afk-subtitle">Your browser needs a click before it plays video.</p>
+            {/* The click bubbles to the overlay: a press anywhere calls stream.play() */}
+            <button className="afk-btn" style={{ backgroundColor: LOADING_CONFIG.accentColor }}>
+              Click to start
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Notices — events `relayFallback`, `openUrl`, `fileProgress` and `file` */}
+      {(relayNotice || linkPrompt || fileTransfer) && (
+        <div className="notice-stack">
+          {relayNotice && (
+            <div className="notice">
+              <span>
+                Your network is blocking UDP, so the stream is relayed over {relayNotice.toUpperCase()},
+                which reduces quality.
+              </span>
+              <button className="dev-tools-btn" onClick={() => setRelayNotice(null)}>Dismiss</button>
+            </div>
+          )}
+          {linkPrompt && (
+            <div className="notice">
+              <span>The application wants to open {hostOf(linkPrompt.url)}</span>
+              <button className="dev-tools-btn" onClick={openLink}>Open</button>
+              <button className="dev-tools-btn" onClick={() => setLinkPrompt(null)}>Stay here</button>
+            </div>
+          )}
+          {fileTransfer && (
+            <div className="notice">
+              {fileTransfer.blob ? (
+                <>
+                  <span>{fileTransfer.name} is ready.</span>
+                  <button className="dev-tools-btn" onClick={saveFile}>Save</button>
+                  <button className="dev-tools-btn" onClick={() => setFileTransfer(null)}>Dismiss</button>
+                </>
+              ) : (
+                <span>Receiving {fileTransfer.name}... {fileTransfer.percent}%</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* AFK Warning Overlay */}
       {afkWarning && (
@@ -767,6 +1113,7 @@ const App = () => {
             <button className="stats-popup-close" onClick={() => setShowDevTools(false)}>&times;</button>
           </div>
           <div className="stats-popup-body">
+            {devNote && <p className="dev-tools-note">{devNote}</p>}
             <div className="dev-tools-section">
               <label className="dev-tools-label">Console Command</label>
               <div className="dev-tools-row">
@@ -801,6 +1148,17 @@ const App = () => {
                 <button className="dev-tools-btn dev-tools-btn-danger" onClick={handleDisconnect}>Disconnect</button>
               </div>
             </div>
+            {/* The engine is downloaded by create(), so its version can differ from the
+                package's. The ids are from the `session` event; a shared-session host
+                gives its streamer id to viewers. */}
+            {sessionInfo && (
+              <div className="dev-tools-section">
+                <label className="dev-tools-label">Session</label>
+                <p className="dev-tools-note">Engine: {sessionInfo.engineVersion}</p>
+                {sessionInfo.sessionId && <p className="dev-tools-note">Session id: {sessionInfo.sessionId}</p>}
+                {sessionInfo.streamerId && <p className="dev-tools-note">Streamer id: {sessionInfo.streamerId}</p>}
+              </div>
+            )}
           </div>
         </div>
       )}
