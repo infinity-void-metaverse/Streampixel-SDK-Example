@@ -1,39 +1,14 @@
-# Streampixel SDK Example (v2 — `@streampixel/core`)
+# Streampixel Web SDK example (v2, `@streampixel/web-sdk`)
 
-A complete reference integration of the **Streampixel Web SDK v2** in React,
-demonstrating every SDK capability: authentication (public / password / SSO /
-programmatic), the typed state machine, queueing, automatic reconnection,
-live stats, quality switching, AFK handling, on-screen keyboard, voice/text
-chat, shared (SFU) viewing, UE messaging, and developer tooling.
+A React reference integration of the **Streampixel Web SDK v2**. It puts the stream of a Streampixel project inside a page and draws every screen a viewer needs around it: loading and queue, password form, "Click to start", idle warning, text input for phones, reconnecting, the end message, plus stats, a quality picker, chat and developer tools.
 
-The SDK is **headless** — every pixel of UI in this app (loading screen,
-password gate, chat panel, controls…) is example code in
-[src/components/App.js](src/components/App.js) that you own. Copy it, restyle
-it, or replace it entirely; the SDK only provides events and methods.
+The SDK draws nothing except the video. Every screen in this app is example code in [src/components/App.js](src/components/App.js) that you own: copy it, restyle it, or replace it.
 
----
+> **Pre-release.** `@streampixel/web-sdk` is not on npm yet, so this repository installs it from a tarball in [vendor/](vendor). The app is written against version 2.0.0-alpha.11.
 
-## Table of contents
+**The full reference is the SDK's own README.** It ships inside the package: after `npm install`, open `node_modules/@streampixel/web-sdk/README.md` (options, states, events, errors, end codes, shared sessions, chat, telemetry) and `MIGRATION.md` next to it (moving from the v1 SDK). This file only explains the example.
 
-1. [Quick start](#quick-start)
-2. [How a session works](#how-a-session-works)
-3. [Packages](#packages)
-4. [`StreamPixel.create()` — all options](#streampixelcreate--all-options)
-5. [States](#states)
-6. [Events](#events)
-7. [Methods & properties](#methods--properties)
-8. [Authentication & `AuthError`](#authentication--autherror)
-9. [Disconnect codes](#disconnect-codes)
-10. [Voice / text / video chat](#voice--text--video-chat)
-11. [Shared (SFU) viewing](#shared-sfu-viewing)
-12. [Upgrading from v1](#upgrading-from-v1)
-13. [Telemetry & privacy](#telemetry--privacy)
-14. [Local SDK development](#local-sdk-development)
-15. [Troubleshooting](#troubleshooting)
-
----
-
-## Quick start
+## Run it
 
 ```bash
 npm install
@@ -41,370 +16,118 @@ npm start
 # open http://localhost:3000/<projectId>      (or /?appId=<projectId>)
 ```
 
-`<projectId>` is your project id from the Streampixel dashboard.
+`<projectId>` is the project id from the Streampixel dashboard. `npm run build` makes the production build; [vercel.json](vercel.json) sends every path to `index.html` so that `/<projectId>` works when deployed.
 
-### URL parameters (this example app)
+URL parameters of this example:
 
-| Param | Meaning |
+| Parameter | Meaning |
 |---|---|
-| `?platform=staging` | Target the staging control plane (default is **production**) |
-| `?shared=host` | Shared (SFU) viewing — host role: owns the session and input |
-| `?shared=viewer&hostStreamerId=<id>` | Watch a host's session (watch-only, enforced server-side) |
-| `?streamerId=<id>` | Pin a specific streamer (session affinity) |
+| `?platform=staging` | Use the staging platform instead of production (for SDK development). |
+| `?shared=host` | Shared session, host role: owns the session and the input. |
+| `?shared=viewer&hostStreamerId=<id>` | Watch a host's session. `<id>` is the host's streamer id (Developer Tools → Session on the host's page). |
+| `?streamerId=<id>` | Use your own id for this connection. |
+| `?engine=beta` | Run the next engine release instead of the stable one. |
 
----
+## The package and the engine
 
-## How a session works
+The package you install is a small **loader**. The **engine**, the code that runs the stream, is downloaded by `StreamPixel.create()` from `https://js.streampixel.io` (mirror: `https://js-backup.streampixel.io`), signed and integrity-checked. Three consequences:
 
-Understanding the flow makes every event self-explanatory:
+- **The engine can be older or newer than the package.** `SDK_VERSION` is the package, `stream.engineVersion` is the engine; the app shows both in Developer Tools. What this app uses is the behaviour of engine 2.0.0-alpha.11: on an older engine some of it is missing (for example the stats fields `packetsLost` and `bytesReceived`, and the end codes 4100 to 4104).
+- **If the engine cannot be downloaded, `create()` rejects with `EngineLoadError`.** There is no copy in the package. The app shows "The player could not be loaded" with `err.reason` and a "Try again" button.
+- **A Content-Security-Policy must allow the hosts**, and the page must be served over `https` or from `localhost`:
 
+  ```
+  script-src  https://js.streampixel.io https://js-backup.streampixel.io;
+  connect-src https://*.streampixel.io wss://*.streampixel.io;
+  ```
+
+  Chat also needs `wss://*.livekit.cloud https://*.livekit.cloud` in `connect-src`.
+
+## Starting and stopping a stream in React
+
+```js
+useEffect(() => {
+  const ac = new AbortController();
+  let stream, unsubscribe;
+
+  StreamPixel.create({ appId, container: ref.current, signal: ac.signal })
+    .then((s) => { stream = s; unsubscribe = subscribe(s); })   // attach listeners right away
+    .catch((err) => { if (err.name !== 'AbortError') showError(err); });
+
+  return () => {
+    unsubscribe?.();   // destroy() announces `ended` before it drops listeners
+    ac.abort();        // before create() resolves: nothing starts. After: the stream is destroyed.
+    stream?.destroy(); // a stream that has already ended no longer follows the signal
+  };
+}, [appId, runId]);
 ```
-create()
-  1. GET  /api/v1/stream/access/<projectId>      → access mode (public/password/sso), branding
-  2. POST /api/v1/stream/ticket                  → { ticket, telemetryToken, voiceToken?, config }
-     · the TICKET is a short-lived signed credential — no API keys in the browser, ever
-     · config carries your full dashboard configuration + the signalling host
-  3. wss://<signalling>/?...&ticket=…            → session enqueued → placed on a GPU worker
-  4. app launches → WebRTC negotiation → frames
-```
 
-The SDK owns steps 2–4 including every failure path: queueing, reconnection
-with backoff (up to **180 s**, and a *soft* reconnect that keeps video playing
-through signalling blips), a frozen-stream watchdog (10 s, one transparent
-session retry), and a fail-fast for WebRTC-blocking corporate networks (~8 s,
-clear error instead of an infinite spinner). Your app only *renders* states.
+Pass `signal` and abort it in the cleanup. React runs an effect twice in development under `<StrictMode>` (this app keeps StrictMode on), and a fast route change unmounts a component before `create()` has resolved. Without the signal, each of those leaves a session streaming with nobody watching.
 
----
+`ended` is final: a stream has no `connect()` or `reconnect()`. To start again, destroy the stream and create a new one. The app does this by changing `runId`, which re-runs the effect ("Start again" on the end card, "Try again" after a failed `create()`).
 
-## Packages
+## What the app shows, and where
 
-| Package | What it is | In this app |
+| Feature | In `App.js` | SDK README section |
 |---|---|---|
-| `@streampixel/core` | Headless engine: auth/tickets, signalling, WebRTC, resilience, telemetry, typed events | everywhere |
-| `@streampixel/core/voice` | Voice/text/video chat (LiveKit). Separate entry — never bundled unless imported | chat panel (💬) |
-| `@streampixel/ui` | Drop-in overlays (`mountUI(stream, {container})`) for integrations without custom UI | not used — this app IS the custom-UI reference |
-
----
-
-## `StreamPixel.create()` — all options
-
-```js
-const stream = await StreamPixel.create({
-  /* ── Required (one of) ─────────────────────────────────────────────── */
-  appId: 'PROJECT_ID',        // omit only on a verified custom domain
-  container: element,         // where the <video> mounts; omit = headless, attach() later
-
-  /* ── Authentication (default: { mode:'auto' }) ─────────────────────── */
-  auth: { mode: 'auto' },                          // access mode decides; SSO auto-redirects
-  //    { mode: 'password', password: '…' }        // password-gated projects
-  //    { mode: 'sso', redirect: 'manual' }        // get AuthError.ssoStartUrl instead of auto-redirect
-  //    { mode: 'ticket', ticket: mintResponse }   // programmatic: YOUR backend minted the ticket
-
-  /* ── Shared (SFU) viewing (default: private 1:1) ───────────────────── */
-  shared: { role: 'host' },                        // or { role:'viewer', hostStreamerId }
-
-  /* ── Stream overrides (default: your dashboard config) ─────────────── */
-  codec:      { primary: 'AV1'|'H264'|'VP9'|'VP8', fallback: 'H264'|'VP8' },
-  resolution: { start: '1080p (1920x1080)' | {width,height},
-                max: …, mobileStart: …, tabletStart: …,
-                mode: 'fixed' | 'dynamic' },       // dynamic = follows window size
-  bitrate:    { min: number, max: number },        // bps
-  input:      { mouse, keyboard, touch, hover, gamepad, xr, fakeMouseWithTouches }, // booleans
-  media:      { mic: boolean, camera: boolean },   // prompts for permission + unmutes
-  afk:        { timeoutSec: number },
-
-  /* ── Built-in minimal loading overlay (default: false) ─────────────── */
-  loading: true,              // project banner/logo/texts until first frame
-
-  /* ── Telemetry (default: 'standard'; never third-party) ────────────── */
-  telemetry: 'standard' | 'minimal',
-
-  /* ── Advanced ──────────────────────────────────────────────────────── */
-  advanced: {
-    platformHost:  'https://platform.streampixel.io',   // staging/on-prem override
-    telemetryHost: 'https://telemetry.streampixel.io',
-    streamerId:    'uuid',                               // session affinity
-    iceTransportPolicy: 'all' | 'relay',                 // expert: force TURN
-  },
-});
-```
-
-`create()` **throws `AuthError`** when access is the problem (see
-[Authentication](#authentication--autherror)) and resolves once the session is
-admitted and connecting.
-
----
-
-## States
-
-Subscribe once; render everything from this:
-
-```js
-stream.on('state', (s) => { … });
-```
-
-| `s.kind` | Meaning | Recommended UX |
-|---|---|---|
-| `resolving` | Access + ticket mint in flight | "Authorizing…" |
-| `queued` | Capacity queue; `s.position` | Queue badge (live `queue` events too) |
-| `starting` | Admitted; app launching on a GPU worker | Loading progress |
-| `connecting` | WebRTC negotiation | Loading progress |
-| `streaming` | Frames flowing | Hide loading, show controls |
-| `stalled` | Connected but no frames for 10 s (`s.sinceMs`) | Nothing — SDK auto-recovers |
-| `recovering` | Transparent fresh-session retry after a stall | "Restarting…" |
-| `reconnecting` | Network drop; `s.attempt`, `s.deadlineMs` | "Reconnecting…" (video often keeps playing — soft reconnect) |
-| `ended` | Final. `s.code`, `s.reason`, `s.endKind` | Goodbye card by `endKind` |
-
-`endKind` is `'user' | 'afk' | 'server' | 'error' | 'network-blocked'`.
-
----
-
-## Events
-
-| Event | Payload | Fires |
-|---|---|---|
-| `state` | `StreamState` (table above) | every transition |
-| `queue` | `{ position, message }` | queue position updates |
-| `stats` | `{ fps, latencyMs, bitrateKbps, resolution, codec, framesDecoded, framesDropped, relayTransport }` | every 1 s while streaming |
-| `stalled` | full WebRTC diagnostics | watchdog fired (recovery already running) |
-| `afkWarning` | `{ kind:'countdown', secondsRemaining, dismiss() }` or `{ kind:'dismissed' }` | idle countdown |
-| `osk` | `{ contents }` | UE focused a text field — reply with `sendTextboxEntry()` |
-| `ueMessage` | raw message | UE → browser (`handle_responses`) |
-| `ended` | `{ code, reason, endKind }` | session over |
-
-`relayTransport` (`'' \| 'udp' \| 'tcp' \| 'tls'`) tells you when the viewer is
-on a restricted network (TCP/TLS relay) — show a quality notice.
-
----
-
-## Methods & properties
-
-```js
-/* Input / UE */
-stream.send({ any: 'json' });              // → UE (emitUIInteraction)
-stream.consoleCommand('stat fps');         // UE console command
-stream.sendTextboxEntry('typed text');     // answer an `osk` event
-stream.setHoverMouse(true);                // hover vs locked mouse
-stream.toggleXR();                         // WebXR (when project enables it)
-
-/* Presentation */
-stream.attach(container);                  // (re)mount the <video>
-stream.setResolution(1920, 1080);
-stream.allowedResolutions;                 // the project's ladder (for pickers)
-stream.toggleAudio();                      // → returns true when audible
-
-/* Introspection */
-stream.state;                              // current StreamState
-stream.streamConfig;                       // full dashboard config + branding
-stream.projectId;                          // resolved project id
-stream.streamerId;                         // this session's wire id (share for SFU)
-stream.voiceToken;                         // present iff chat is enabled
-await stream.getDiagnostics();             // WebRTC snapshot + human verdict
-stream.captureScreenshot();                // PNG data URL of the current frame
-
-/* Lifecycle */
-stream.disconnect();                       // deliberate end — never auto-reconnects
-```
-
----
-
-## Authentication & `AuthError`
-
-```js
-try {
-  stream = await StreamPixel.create({ appId });
-} catch (err) {
-  if (err instanceof AuthError) {
-    switch (err.kind) {
-      case 'password-required': /* show password form                    */ break;
-      case 'password-wrong':    /* wrong password — show error, retry    */ break;
-      case 'sso-required':      /* manual mode: navigate err.ssoStartUrl */ break;
-      case 'project-offline':   /* owner turned it off / no build        */ break;
-      case 'project-not-found': /* bad link                              */ break;
-      case 'programmatic-only': /* must mint server-side                 */ break;
-      case 'network':           /* platform unreachable                  */ break;
-    }
-  }
-}
-// password retry:
-StreamPixel.create({ appId, auth: { mode: 'password', password } });
-```
-
-- **Public** projects mint anonymously — no code needed.
-- **SSO** projects with the default `auto` mode redirect to the IdP and resume
-  automatically with the single-use grant on return. Zero SSO code here.
-- **Programmatic**: your backend calls `POST /api/v1/stream/ticket` with its
-  API credentials and hands the response to the browser. The SDK never sees an
-  API key — the short-lived ticket is the only client credential.
-
-This app's password gate (with error handling) is in `App.js` →
-`handlePasswordSubmit`.
-
----
-
-## Disconnect codes
-
-`ended.code` uses the platform's stable vocabulary — build UX on these:
-
-| Code | Meaning | SDK behaviour |
-|---|---|---|
-| 1000 | Clean close | final |
-| 1006 | Network drop | auto-reconnects first; 1006 surfaces only if the window is spent |
-| 1008 | Ticket rejected / unauthorized | final (retrying can't help) |
-| 4000 | Session terminated (admin/API) | final |
-| 4002 | Application not found on worker | final |
-| 4003 | Application failed to launch | final |
-| 4004 | Max runtime reached | final |
-| 4005 | App never connected (timeout) | final |
-| 4006 | App disconnected mid-session | final |
-| 4007 | Reconnect window exhausted | final (`endKind:'error'`) |
-| 4008 | Session setup failed | final |
-
----
-
-## Voice / text / video chat
-
-Available when the ticket carries a `voiceToken` (chat enabled in the
-dashboard). LiveKit is only downloaded when this module is imported:
-
-```js
-import { VoiceChat } from '@streampixel/core/voice';
-
-const chat = VoiceChat.for(stream, {
-  userName: 'Alice',
-  avatar: 'https://…/alice.png',   // optional
-  voice: false,                    // join muted (text-only); true opens the mic
-});
-await chat.join();
-
-chat.on('message', ({ from, text, avatar }) => …);
-chat.on('roster', ({ localParticipant, remoteParticipants }) => …);
-//   each participant: { id, avatar, speaking, micMuted, videoTrack|null }
-chat.on('typing', ({ from }) => …);
-chat.on('deviceError', ({ message }) => …);   // mic/camera denied, in use, missing
-
-chat.sendMessage('hi');
-chat.sendTyping();                       // lossy; receivers clear on timeout
-await chat.toggleMic(true);              // resolves false if the mic didn't come up
-await chat.toggleCamera(true);           // VIDEO CHAT: then render roster videoTracks
-chat.setRemoteAudio(false, identity?);   // local moderation: mute someone / everyone
-await chat.leave();
-```
-
-Video chat = `toggleCamera(true)` + attaching each roster entry's
-`videoTrack` to a `<video>` element (LiveKit track: `track.attach()`).
-
-The 💬 button in this app demonstrates lazy join, messages, typing indicators
-and mic toggle — and interops with share.streampixel.io viewers in the same
-room.
-
----
-
-## Shared (SFU) viewing
-
-One UE instance, many watchers. The host owns input; viewers are watch-only
-(server-enforced, and input is disabled locally too):
-
-```js
-// Host page
-const host = await StreamPixel.create({ appId, container, shared: { role: 'host' } });
-sendToViewers(host.streamerId);          // however your app distributes it
-
-// Viewer pages
-await StreamPixel.create({ appId, container,
-  shared: { role: 'viewer', hostStreamerId } });
-```
-
-In this app: `/projectId?shared=host`, then
-`/projectId?shared=viewer&hostStreamerId=<host's streamerId>`.
-
----
-
-## Upgrading from v1
-
-### Drop-in compatibility bridge
-
-v1 code listened to raw Epic events. Core exposes the same surface so old
-integrations port **without rewriting event code**:
-
-```js
-// v1-style — still works on the v2 instance:
-stream.addEventListener('webRtcConnected', () => …);
-stream.addEventListener('playStream', () => …);
-stream.addEventListener('afkWarningActivate', (e) => …);
-stream.addResponseEventListener('handle_responses', (response) => …);
-stream.emitUIInteraction({ … });
-stream.emitConsoleCommand('stat fps');
-```
-
-The bridge survives the SDK's internal reconnect rebuilds (v1 never had
-those). New code should prefer the typed `on('state'|…)` surface — it's the
-documented, stable contract.
-
-### What changed
-
-| v1 | v2 |
-|---|---|
-| `StreamPixelApplication({...})` returns Epic internals | `StreamPixel.create({...})` returns a typed facade |
-| API key + config from legacy endpoints | Server-minted **ticket**; no secrets in the browser |
-| Reconnect/queue/AFK re-implemented by every integrator | Built into the SDK; you render states |
-| Mixpanel bundled | First-party telemetry only |
-| `sfuHost: 'false'` string flags | Typed `shared: { role }` |
-| Obfuscated bundle | Readable TS + sourcemaps; integrity via immutable npm versions & CDN SRI |
-
----
-
-## Telemetry & privacy
-
-The SDK reports session lifecycle + WebRTC quality to Streampixel's own
-pipeline, authenticated with a session-scoped token from the ticket
-(`telemetry: 'minimal'` restricts to lifecycle events). **No third-party
-trackers, no cookies, no analytics SDKs.** These reports are what make
-sessions debuggable in the dashboard when a viewer reports a problem.
-
----
-
-## Local SDK development
-
-This repo consumes the SDK from a **vendored tarball**
-(`vendor/streampixel-core-*.tgz`) so a fresh clone builds before the packages
-hit npm. To develop SDK and example side by side:
+| Start, stop, start again | the effect "Start a stream", `restart` | React; Methods and properties → Session |
+| `create()` failed: `AuthError` kinds, `EngineLoadError`, wrong option | `describeCreateError` | Errors from `create()` |
+| Loading, queue, reconnecting, recovering | `onState`, the `progress` and `queue` listeners | States; Reconnecting and recovery |
+| Password form | `passwordGate`, `handlePasswordSubmit`, `passwordMessage` | Access → Password projects |
+| "Click to start" when the browser blocks autoplay | `needsPlay`, `handlePlay` | States (`awaitingPlay`) |
+| End card | the `ended` listener | How a session ends, and end codes |
+| Stats popup | the `stats` listener | Events → `StreamStats` |
+| Quality picker | `handleResolutionChange` | Methods and properties → Video, sound and input |
+| Idle warning | the `afkWarning` listener | Events |
+| Text input for phones | the `osk` and `oskHide` listeners, `submitOsk` | Events |
+| Links and files sent by the application, relay notice | the `openUrl`, `fileProgress`, `file` and `relayFallback` listeners | Events |
+| Voice and text chat | `openChat` | Voice, text and video chat |
+| Shared sessions | `readUrlOptions` | Shared sessions |
+| Messages and console commands to the application | Developer Tools handlers | Methods and properties → Talking to your application |
+
+Things worth knowing when you copy from it:
+
+- **States.** The app switches on `state.kind`: `idle`, `awaitingPassword`, `connecting`, `queued`, `streaming`, `awaitingPlay`, `recovering`, `reconnecting`, `ended`. Keep a `default` branch: a newer engine may add a kind.
+- **Passwords are a state, not an error.** On a password project `create()` resolves with `stream.state.kind === 'awaitingPassword'`, so render `stream.state` right after `create()`. Answer with `stream.submitPassword(text)`. It resolves for a right and for a wrong password; the state's `wrong`, `locked`, `hard` and `retryAfterSec` say what happened.
+- **Single sign-on needs no code.** The SDK sends the browser to the sign-in page and finishes the sign-in on the next `create()`. A refused sign-in rejects with kind `sso-failed`; the app shows its `message` and a "Sign in again" button for `ssoStartUrl`.
+- **The end message comes from the SDK.** `ended` carries `message`, a sentence for the viewer, with `code`, `reason` and `endKind` for your logs.
+- **`send()`, `consoleCommand()` and `setResolution()` say whether anything was sent.** Nothing is queued: `send()` returns `false` before the video is up. `setResolution()` returns the size that was sent, or `null`.
+- **Some events have a built-in action that runs only without a listener.** The app listens to `openUrl` and `file` (it shows a button, which phones and tablets need), and leaves `screenshot` to the SDK, which downloads the frame.
+- **`VoiceChat.for()` returns a Promise**: `const chat = await VoiceChat.for(stream, { userName })`. The chat code is downloaded on first use. If you set `advanced.platformHost` on the stream, pass the same host to the chat.
+- **Units.** `bitrate` is in kilobits per second: `{ min: 1_000, max: 20_000 }` is 1 to 20 Mbps.
+
+## Access: "Your app only"
+
+Public, password and single sign-on projects work in this app as it is. A project set to **Your app only** in the dashboard rejects with `AuthError` kind `server-ticket-required`: it only starts with a ticket that your own server requested.
+
+1. Your server calls `POST https://platform.streampixel.io/api/v1/stream/ticket` with the project's **server key** in the `x-server-key` header, after your own sign-in check. The server key never goes in a page.
+2. Your page passes **the whole response object** to the SDK: `auth: { mode: 'ticket', ticket }`. The ticket string alone is refused.
+3. Request a new ticket for every `create()`, a page reload included.
+
+The server code is in the SDK README, section "Your app only".
+
+## Updating the vendored SDK
 
 ```bash
-cd ../SDK-GENERATOR/packages/core
-# 1. edit src/…  2. bump the prerelease (cache-busting is mandatory):
-npm version 2.0.0-alpha.<n+1> --no-git-tag-version
-npm run build && npm pack --pack-destination /tmp
-cp /tmp/streampixel-core-*.tgz ../../../Streampixel-SDK-Example/vendor/
-cd ../../../Streampixel-SDK-Example
-rm vendor/<old>.tgz && npm install ./vendor/streampixel-core-<new>.tgz
+# in the SDK repository (packages/core)
+npm run build && npm pack
+
+# here
+git rm vendor/streampixel-web-sdk-*.tgz
+cp <path>/streampixel-web-sdk-<version>.tgz vendor/
+npm install ./vendor/streampixel-web-sdk-<version>.tgz
 ```
 
-> **Always bump the version when the tarball changes** — npm, Vercel and CI
-> all cache by name+version; identical versions with different bytes produce
-> stale installs (exactly the "`./voice` is not exported" Vercel failure).
-
-Once v2 publishes to npm, the `file:` dep becomes a normal version range.
-
----
+Change the version whenever the content of the tarball changes: npm, Vercel and CI cache by name and version, so the same version with different bytes gives a stale install. Once the package is on npm, the `file:` dependency becomes a normal version range.
 
 ## Troubleshooting
 
-- **Black container, no loading UI** — you built custom UI and aren't
-  rendering `state`, or pass `loading: true` for the SDK's minimal overlay.
-- **`ws://localhost:3000/ws` in devtools** — webpack hot reload, not the SDK.
-  The SDK's socket is `wss://<region-signalling>/?...&ticket=…`.
-- **Red telemetry rows under DevTools throttling** — telemetry has a hard
-  1.5 s timeout so it can never slow the stream; aborts under throttling are
-  by design.
-- **Chat button missing** — project has chat disabled (no `voiceToken`), or
-  the stream hasn't reached `streaming` yet.
-- **`osk` never fires** — the UE app must use Pixel Streaming's text-input
-  widgets.
-- **Stuck in `queued`** — project at its concurrency limit; the `queue`
-  events carry the live position.
-- **`ended` with `network-blocked`** — the viewer's network blocks UDP *and*
-  TURN relay; the reason text includes remediation (allow `*.turn.twilio.com`
-  on TCP/443).
-- **1008 immediately on connect** — domain-restricted project: the embedding
-  origin isn't in the project's allowed domains.
+- **"The player could not be loaded"**: `EngineLoadError`. The reason is on the card: usually the network, an ad blocker, or a Content-Security-Policy that does not allow the two engine hosts.
+- **Black container, no screens**: the SDK draws only the video. Render the states yourself, as this app does, or mount `@streampixel/ui`.
+- **Two sessions start in development**: `create()` was called without `signal`, or the cleanup does not abort it.
+- **The session ends with code `1008` as soon as it connects**: the page's origin is not in the project's allowed-domains list. The platform compares the exact origin.
+- **`send()` or `consoleCommand()` returns `false`**: the stream is not up yet. For console commands, the application must also be launched with `-AllowPixelStreamingCommands`.
+- **Chat button missing**: the project has chat switched off (`stream.voiceToken` is `undefined`), or the stream is not up yet.
+- **Waiting in the queue**: no GPU is free yet; the `queue` event carries the position.
+- **`ws://localhost:3000/ws` in the browser's developer tools**: webpack's hot reload, not the SDK.
+- **Failed telemetry requests under network throttling**: each telemetry request has a 1.5 second limit so that it never delays the stream.
