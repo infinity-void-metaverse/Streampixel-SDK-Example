@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { StreamPixel, AuthError, SDK_VERSION } from '@streampixel/core';
-import { VoiceChat } from '@streampixel/core/voice';
+import { StreamPixel, AuthError, SDK_VERSION } from '@streampixel/web-sdk';
+import { VoiceChat } from '@streampixel/web-sdk/voice';
 
 /* =========================================================================
    Streampixel SDK v2 example — @streampixel/core

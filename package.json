@@ -5,18 +5,10 @@
   "private": true,
   "license": "MIT",
   "dependencies": {
-    "@streampixel/core": "file:vendor/streampixel-core-2.0.0-alpha.2.tgz",
-    "browserify-zlib": "^0.2.0",
-    "crypto-browserify": "^3.12.1",
-    "https-browserify": "^1.0.0",
-    "os-browserify": "^0.3.0",
-    "path-browserify": "^1.0.1",
+    "@streampixel/web-sdk": "file:vendor/streampixel-web-sdk-2.0.0-alpha.11.tgz",
     "react": "^18.3.1",
-    "react-app-rewired": "^2.2.1",
     "react-dom": "^18.3.1",
-    "react-scripts": "^5.0.1",
-    "stream-browserify": "^3.0.0",
-    "stream-http": "^3.2.0"
+    "react-scripts": "^5.0.1"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -33,8 +25,5 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  },
-  "devDependencies": {
-    "process": "^0.11.10"
   }
 }
