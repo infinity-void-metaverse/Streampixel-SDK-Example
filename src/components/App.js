@@ -1,21 +1,21 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { StreamPixelApplication } from 'streampixelsdk';
+import { StreamPixel, AuthError, EngineLoadError, SDK_VERSION } from '@streampixel/web-sdk';
+import { VoiceChat } from '@streampixel/web-sdk/voice';
 
 /* =========================================================================
-   FEATURE TOGGLES
-   =========================================================================
-   Set SHOW_DEV_TOOLS to true to display the Developer Tools panel
-   (console commands, UI interaction, disconnect, resolution, mic, etc.).
-   Set to false to hide it entirely in production.
+   Streampixel Web SDK v2 example — @streampixel/web-sdk
+
+   The SDK draws nothing except the video. It gives your code one `stream`
+   object with typed states, events and errors. Everything you see in this
+   file's render tree is example UI you own: copy it, restyle it, or
+   replace it. (For ready-made screens instead, see @streampixel/ui.)
+
+   Full reference: the README of @streampixel/web-sdk.
    ========================================================================= */
 const SHOW_DEV_TOOLS = true;
 
-
 /* =========================================================================
    CUSTOMIZATION: Loading Screen Configuration
-   =========================================================================
-   Modify these values to customize the loading screen that appears
-   while the stream is connecting.
    ========================================================================= */
 const LOADING_CONFIG = {
   backgroundColor: '#18181A',
@@ -23,46 +23,180 @@ const LOADING_CONFIG = {
   logoUrl: null, // e.g. '/Images/logo.png'
   title: 'Connecting to Stream',
   subtitle: 'Please wait while we set up your experience...',
-  disconnectedSubtitle: 'The stream session has ended.',
   queueMessage: (position) => `You are in queue at position ${position}`,
   showSpinner: true,
 
   statusMessages: {
-    initializing:    'Initializing...',
-    connecting:      'Connecting to server...',
-    webRtcConnecting:'Establishing WebRTC connection...',
-    sdpNegotiation:  'Negotiating stream parameters...',
-    webRtcConnected: 'WebRTC connected, loading stream...',
-    streamLoading:   'Stream is loading...',
-    playingStream:   'Starting video playback...',
-    inQueue:         'Waiting in queue...',
-    failed:          'Connection failed. Please try again.',
-    disconnected:    'Disconnected from stream.',
-    reconnecting:    'Reconnecting to stream...',
-    retrying:        'Retrying connection...',
-    reconnected:     'Reconnected! Loading stream...',
-    reconnectFailed: 'Unable to reconnect. Please refresh the page.',
+    initializing: 'Initializing...',
+    preparing: 'Preparing your session...',          // StreamPixel.create() is running
+    connecting: 'Connecting to your application...', // states `idle` and `connecting`
+    inQueue: 'Waiting in queue...',                  // state `queued`
+    // The `progress` event tells the steps inside `connecting` apart:
+    offer: 'Your application answered. Setting up the video...',
+    answer: 'Establishing the video connection...',
+    connected: 'Connected. Waiting for the first frame...',
+    recovering: 'Restarting the stream...',          // state `recovering`
+    reconnecting: 'Reconnecting to stream...',       // state `reconnecting`
+    waitingForHost: 'Waiting for the host...',       // `reconnecting` with waitingForHost (shared-session viewer)
+    // "Test locally" (?dev=<session id>): the stream comes from your own Unreal Editor.
+    devConnecting: 'Waiting for your Unreal Editor to connect...',
+    devWaiting: 'Unreal stopped streaming. Waiting for it to come back...',
   },
 
-  reconnectingTitle:       'Reconnecting',
-  reconnectingSubtitle:    'Please wait while we restore your session...',
-  reconnectedTitle:        'Reconnected',
-  reconnectFailedTitle:    'Reconnection Failed',
-  reconnectFailedSubtitle: 'We were unable to restore your session.',
+  reconnectingTitle: 'Reconnecting',
+  reconnectingSubtitle: 'Please wait while we restore your session...',
+  endedTitle: 'Session Ended',
+  unavailableTitle: 'Stream Unavailable',
 };
 
+/* Map the SDK's states, and the steps of the `progress` event, onto the progress bar. */
+const PROGRESS_BY_STATE = {
+  idle: 10,
+  queued: 15,
+  connecting: 30,
+  streaming: 100,
+  awaitingPlay: 100,
+  recovering: 20,
+  reconnecting: 20,
+};
+const PROGRESS_BY_STAGE = { offer: 55, answer: 70, connected: 85 };
+
+/* Download a PNG data URL (the Screenshot button, and a screenshot the application asked for). */
+function savePng(dataUrl) {
+  if (!dataUrl) return;
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = 'streampixel-screenshot.png';
+  a.click();
+}
+
+/* A dev session id as the dashboard's Test Locally tab shows it: dev- and six characters. */
+const DEV_SESSION_ID = /^dev-[a-f0-9]{6}$/i;
+
+/* The "Test locally" switch. On (a session id): reload this page with
+   ?dev=<session id>, so the stream comes from your own Unreal Editor. Off
+   (null): reload without it, back to the uploaded build. A dev session cannot
+   be a shared session, so `shared` and `hostStreamerId` are dropped when it is
+   switched on. Returns false when the id is not a dev session id. */
+function switchTestLocally(sessionId) {
+  const url = new URL(window.location.href);
+  if (sessionId) {
+    if (!DEV_SESSION_ID.test(sessionId)) return false;
+    url.searchParams.set('dev', sessionId);
+    url.searchParams.delete('shared');
+    url.searchParams.delete('hostStreamerId');
+  } else {
+    url.searchParams.delete('dev');
+  }
+  window.location.assign(url.href);
+  return true;
+}
+
+/* This example's URL parameters (see the README). Production is the default. */
+function readUrlOptions() {
+  const params = new URLSearchParams(window.location.search);
+  // ?platform=staging opts in to the staging control plane, for SDK development.
+  const staging = params.get('platform') === 'staging';
+  // Shared session: ?shared=host, or ?shared=viewer&hostStreamerId=<id>
+  const sharedParam = params.get('shared');
+  const hostStreamerId = params.get('hostStreamerId');
+  return {
+    platformHost: staging ? 'https://platform.staging.streampixel.io' : undefined,
+    telemetryHost: staging ? 'https://telemetry.staging.streampixel.io' : undefined,
+    shared:
+      sharedParam === 'host'
+        ? { role: 'host' }
+        : sharedParam === 'viewer' && hostStreamerId
+          ? { role: 'viewer', hostStreamerId }
+          : undefined,
+    streamerId: params.get('streamerId') || undefined,
+    // "Test locally": ?dev=dev-1a2b3c streams from your own Unreal Editor instead of
+    // the uploaded build. The id comes from the dashboard's Test Locally tab.
+    dev: DEV_SESSION_ID.test(params.get('dev') || '') ? { sessionId: params.get('dev') } : undefined,
+    // ?engine=beta runs the next engine release instead of the stable one.
+    engine: params.get('engine') === 'beta' ? { channel: 'beta' } : undefined,
+  };
+}
+
+/* What to tell the viewer when StreamPixel.create() rejects.
+   `retry` offers a "Try again" button; `signInUrl` a "Sign in again" button. */
+function describeCreateError(err) {
+  if (err instanceof AuthError) {
+    switch (err.kind) {
+      case 'project-offline':
+        return { subtitle: 'This stream is unavailable right now.', retry: true };
+      case 'project-not-found':
+        return { subtitle: 'This stream does not exist. Check the project id in the link.' };
+      case 'rate-limited':
+        return { subtitle: `Too many attempts. Try again in ${err.retryAfterSec ?? 60} seconds.`, retry: true };
+      case 'network':
+        return { subtitle: 'Could not reach Streampixel. Check your connection.', retry: true };
+      case 'sso-required':
+        // Single sign-on: the SDK is already sending the browser to the sign-in page.
+        return { title: 'Signing in', subtitle: 'Taking you to the sign-in page...' };
+      case 'sso-failed':
+        // err.message is a sentence for the viewer; err.ssoStartUrl starts the sign-in again.
+        return { subtitle: err.message, status: err.ssoErrorCode, signInUrl: err.ssoStartUrl };
+      case 'server-ticket-required':
+        // "Your app only": the project's owner must request a ticket on their server
+        // and pass the whole response as auth: { mode: 'ticket', ticket }.
+        return {
+          subtitle: 'This stream can only be opened from its owner\'s own application.',
+          status: 'Project access is "Your app only": a server ticket is required.',
+        };
+      case 'shared-room-taken':
+        return { subtitle: 'This shared session already has a host.' };
+      case 'dev-session-not-found':
+        // "Test locally": the id is not a session of this project.
+        return { subtitle: 'This dev session does not exist for this project.', status: 'Start one in the dashboard (Test Locally) and use its id.', leaveDev: true };
+      case 'dev-session-expired':
+        return { subtitle: 'This dev session has expired.', status: 'Start a new one in the dashboard (Test Locally).', leaveDev: true };
+      default:
+        // A newer engine may add a kind. err.status is the HTTP status, when there was one.
+        return { subtitle: err.message, status: `${err.kind}${err.status ? ` (HTTP ${err.status})` : ''}`, retry: true };
+    }
+  }
+  if (err instanceof EngineLoadError) {
+    // The engine is downloaded by create(); err.reason says why that failed
+    // (offline, an ad blocker, a Content-Security-Policy that does not allow the hosts, ...).
+    return { subtitle: 'The player could not be loaded.', status: `Reason: ${err.reason}`, retry: true };
+  }
+  // TypeError: an option passed to create() is wrong. The message names it.
+  return { subtitle: err?.message || 'The stream could not be started.' };
+}
+
+/* The line under the password form, from the fields of the `awaitingPassword` state. */
+function passwordMessage(gate) {
+  if (gate.hard) {
+    // Every attempt is refused for now: the form is disabled until the wait is over.
+    return `Too many attempts. Try again in ${gate.retryAfterSec ?? 60} seconds.`;
+  }
+  if (gate.locked) {
+    // Too many wrong attempts. The right password is still accepted: the form stays usable.
+    return 'Too many wrong attempts. Check the password before you try again.';
+  }
+  if (gate.wrong) return 'Incorrect password. Please try again.';
+  return '';
+}
+
+function hostOf(url) {
+  try {
+    return new URL(url).host;
+  } catch (_) {
+    return url;
+  }
+}
 
 const App = () => {
-  // SDK refs (stable across renders, not React state)
-  const pixelStreamingRef = useRef(null);
-  const appStreamRef = useRef(null);
-  const uiControlRef = useRef(null);
+  const streamRef = useRef(null);      // the current stream (StreamPixel.create() result)
+  const videoRef = useRef(null);       // the container the SDK puts its <video> in
+  const latestStats = useRef(null);    // updated every second by the stats event
 
   // URL-derived config
   const [projectId, setProjectId] = useState(null);
-  const [sfuHost, setSfuHost] = useState('false');
-  const [sfuPlayer, setSfuPlayer] = useState('false');
-  const [streamerId, setStreamerId] = useState(undefined);
+  // `ended` is final: to start again, the old stream is destroyed and a new one
+  // created. Changing this number re-runs the effect that does both.
+  const [runId, setRunId] = useState(0);
 
   // Loading state
   const [isLoading, setIsLoading] = useState(true);
@@ -71,7 +205,17 @@ const App = () => {
   const [queuePosition, setQueuePosition] = useState(null);
   const [loadingStatus, setLoadingStatus] = useState(LOADING_CONFIG.statusMessages.initializing);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const isReconnecting = useRef(false);
+  const [loadingAction, setLoadingAction] = useState(null); // a button on the card: { label, run }
+
+  // Password gate: the `awaitingPassword` state (fields wrong, locked, hard,
+  // retryAfterSec) while the stream waits for submitPassword(); null otherwise.
+  const [passwordGate, setPasswordGate] = useState(null);
+  const [password, setPassword] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+
+  // The browser blocked autoplay (state `awaitingPlay`): show "Click to start".
+  const [needsPlay, setNeedsPlay] = useState(false);
 
   // Controls state
   const [isMuted, setIsMuted] = useState(true);
@@ -82,317 +226,492 @@ const App = () => {
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
   const [currentResolution, setCurrentResolution] = useState('Auto (Dashboard)');
-  const [resolutionEnabled, setResolutionEnabled] = useState(false);
+  const [resolutionOptions, setResolutionOptions] = useState([]);
 
   // AFK state
   const [afkWarning, setAfkWarning] = useState(false);
   const [afkCountdown, setAfkCountdown] = useState(0);
   const dismissAfkRef = useRef(null);
 
+  // On-screen keyboard (UE text fields): null = closed, string = current text
+  const [oskText, setOskText] = useState(null);
+
+  // Notices raised by events: `relayFallback`, `openUrl`, `fileProgress` / `file`
+  const [relayNotice, setRelayNotice] = useState(null);   // 'tcp' | 'tls'
+  const [linkPrompt, setLinkPrompt] = useState(null);     // { url, open }
+  const [fileTransfer, setFileTransfer] = useState(null); // { name, percent } while arriving, { name, blob } when complete
+
+  // Chat (voice/text via @streampixel/web-sdk/voice): available when the project
+  // has chat switched on in the dashboard (stream.voiceToken is then set).
+  const chatRef = useRef(null);
+  const [chatAvailable, setChatAvailable] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatJoined, setChatJoined] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [micOn, setMicOn] = useState(false);
+  const [roster, setRoster] = useState({ localParticipant: null, remoteParticipants: [] });
+  const [someoneTyping, setSomeoneTyping] = useState(false);
+  const typingTimer = useRef(null);
+
   // Developer Tools state
   const [showDevTools, setShowDevTools] = useState(false);
   const [consoleCmd, setConsoleCmd] = useState('stat fps');
   const [uiInteractionJson, setUiInteractionJson] = useState('{"type":"setColor","value":"red"}');
-
-  const videoRef = useRef(null);
+  const [devNote, setDevNote] = useState('');           // result of the last send / console command
+  const [sessionInfo, setSessionInfo] = useState(null); // { engineVersion, sessionId, streamerId }
+  // "Test locally": the dev session id typed into Developer Tools (see handleTestLocally).
+  const [devSessionInput, setDevSessionInput] = useState(() => new URLSearchParams(window.location.search).get('dev') || '');
+  const activeDevSession = readUrlOptions().dev?.sessionId || null; // the page was opened with ?dev=<session id>
+  // Picture quality as 1 to 4 bars, from the encoder's QP (lower QP = better picture). 0 = not known yet.
+  const qualityBars = useRef(0);
 
   /* =====================================================================
-     Parse project ID and query params from URL
+     Parse project ID from the URL: /<projectId> or /?appId=<projectId>
      ===================================================================== */
   useEffect(() => {
-    const urlPart = window.location.href.split('/').pop();
-    if (!urlPart) return;
-
-    const baseId = urlPart.split('?')[0];
-    setProjectId(baseId);
-
     const params = new URLSearchParams(window.location.search);
-    if (params.has('streamerId')) setStreamerId(params.get('streamerId'));
-    if (params.has('sfuHost')) setSfuHost(params.get('sfuHost'));
-    if (params.has('sfuPlayer')) setSfuPlayer(params.get('sfuPlayer'));
+    const pathId = window.location.pathname.split('/').filter(Boolean).pop();
+    setProjectId(params.get('appId') || pathId || null);
+  }, []);
+
+  const restart = useCallback(() => setRunId((n) => n + 1), []);
+
+  /* A final card on the loading screen: the session ended, or create() failed. */
+  const showFinalCard = useCallback(({ title, subtitle, status = '', action = null }) => {
+    setIsLoading(true);
+    setLoadingProgress(0); // hides the spinner and the progress bar
+    setQueuePosition(null);
+    setLoadingTitle(title);
+    setLoadingSubtitle(subtitle);
+    setLoadingStatus(status);
+    setLoadingAction(action);
   }, []);
 
   /* =====================================================================
-     Initialize SDK when projectId is ready
+     Listen to a stream. Returns the function that removes every listener.
      ===================================================================== */
-  useEffect(() => {
-    if (!projectId) return;
+  const subscribe = useCallback((stream) => {
+    /* ─── States → loading screen, password form, "Click to start" ───── */
+    const onState = (s) => {
+      const progress = PROGRESS_BY_STATE[s.kind];
+      if (progress !== undefined) setLoadingProgress(progress);
+      setPasswordGate(s.kind === 'awaitingPassword' ? s : null);
+      setNeedsPlay(s.kind === 'awaitingPlay');
 
-    let mounted = true;
-
-    const startPlay = async () => {
-      setLoadingStatus(LOADING_CONFIG.statusMessages.connecting);
-      setLoadingProgress(10);
-
-      /* ─────────────────────────────────────────────────────────────────
-         StreamPixelApplication() — Initialize the SDK.
-
-         The appId is your project ID from the Streampixel dashboard.
-         It resolves all server-side config automatically (signaling URL,
-         TURN credentials, UE instance pool, auth tokens).
-
-         Everything else below is optional. If omitted, settings default
-         to your Streampixel dashboard configuration.
-         ───────────────────────────────────────────────────────────────── */
-      const { appStream, pixelStreaming, queueHandler, UIControl, reconnectStream } = await StreamPixelApplication({
-
-        // ── Required ──────────────────────────────────────────────────
-        appId: projectId,
-
-        // ── Connection ────────────────────────────────────────────────
-        AutoConnect: true,
-        streamerId,
-        sfuHost,
-        sfuPlayer,
-        forceTurn: true,
-
-        // ── The settings below are OPTIONAL overrides. ────────────────
-        // ── If omitted, they default to your Streampixel dashboard. ───
-
-        // ── Codec (defaults from dashboard) ───────────────────────────
-        // primaryCodec: "AV1",        // 'AV1' | 'H264' | 'VP9' | 'VP8'
-        // fallBackCodec: "H264",
-
-        // ── Resolution (defaults from dashboard) ──────────────────────
-        // maxStreamQuality: '1080p (1920x1080)',
-        // startResolution: "1080p (1920x1080)",
-        // startResolutionMobile: "480p (854x480)",
-        // startResolutionTab: "720p (1280x720)",
-        // resolutionMode: "Fixed Resolution Mode",
-
-        // ── Bitrate / Quality (defaults from dashboard) ───────────────
-        // minBitrate: 1,
-        // maxBitrate: 100,
-        // minQP: 20,
-        // maxQP: -1,
-
-        // ── Resolution UI ────────────────────────────────────────────
-        // showResolution: true,        // Show resolution control to user
-
-        // ── Input (defaults from dashboard) ───────────────────────────
-        // mouseInput: true,
-        // keyBoardInput: true,
-        // touchInput: true,
-        // hoverMouse: true,
-        // gamepadInput: true,
-        // xrInput: true,
-        // fakeMouseWithTouches: false,
-
-        // ── Audio / Camera (defaults from dashboard) ────────────────────
-        // useMic: true,
-        // useCamera: true,
-
-        // ── AFK / Timeout (defaults from dashboard) ───────────────────
-        // afktimeout: 120,
-      });
-
-      if (!mounted) return;
-
-      // Store SDK refs
-      pixelStreamingRef.current = pixelStreaming;
-      appStreamRef.current = appStream;
-      uiControlRef.current = UIControl;
-
-      // Check if dashboard allows resolution control
-      const resOptions = UIControl.getResolution();
-      if (resOptions) setResolutionEnabled(true);
-
-      /* ─── Reconnection Lifecycle ─────────────────────────────────── */
-      reconnectStream.on('state', (data) => {
-        switch (data.status) {
-          case 'connecting':
-          case 'reconnecting':
-            setIsLoading(true);
-            setIsMuted(true);
-            setLoadingTitle(LOADING_CONFIG.reconnectingTitle);
-            setLoadingSubtitle(LOADING_CONFIG.reconnectingSubtitle);
-            setLoadingStatus(LOADING_CONFIG.statusMessages.reconnecting);
-            setLoadingProgress(20);
-            isReconnecting.current = true;
-            break;
-
-          case 'connected':
-            setLoadingTitle(LOADING_CONFIG.reconnectedTitle);
-            setLoadingSubtitle(LOADING_CONFIG.subtitle);
-            setLoadingStatus(LOADING_CONFIG.statusMessages.reconnected);
-            setLoadingProgress(70);
-            break;
-
-          case 'disconnected':
-            setIsLoading(true);
-            if (!isReconnecting.current) {
-              setLoadingTitle('Disconnected');
-              setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
-              setLoadingStatus(LOADING_CONFIG.statusMessages.disconnected);
-              setLoadingProgress(0);
-            }
-            break;
-
-          case 'failed':
-            setIsLoading(true);
-            setLoadingTitle(LOADING_CONFIG.reconnectFailedTitle);
-            setLoadingSubtitle(LOADING_CONFIG.reconnectFailedSubtitle);
-            setLoadingStatus(LOADING_CONFIG.statusMessages.reconnectFailed);
-            setLoadingProgress(0);
-            break;
-
-          default:
-            break;
-        }
-      });
-
-      /* ─── Hide default Pixel Streaming UI ────────────────────────── */
-      const uiFeaturesEl = appStream.uiFeaturesElement
-        || appStream.rootElement?.querySelector('#uiFeatures');
-      if (uiFeaturesEl) uiFeaturesEl.style.display = 'none';
-
-      /* ─── WebRTC Lifecycle Events → Loading Progress ─────────────── */
-      pixelStreaming.addEventListener('webRtcAutoConnect', () => {
-        setLoadingStatus(LOADING_CONFIG.statusMessages.connecting);
-        setLoadingProgress(15);
-      });
-
-      pixelStreaming.addEventListener('webRtcConnecting', () => {
-        setLoadingStatus(LOADING_CONFIG.statusMessages.webRtcConnecting);
-        setLoadingProgress(30);
-      });
-
-      pixelStreaming.addEventListener('webRtcSdp', () => {
-        setLoadingStatus(LOADING_CONFIG.statusMessages.sdpNegotiation);
-        setLoadingProgress(50);
-      });
-
-      pixelStreaming.addEventListener('webRtcConnected', () => {
-        setLoadingStatus(LOADING_CONFIG.statusMessages.webRtcConnected);
-        setLoadingProgress(70);
-      });
-
-      pixelStreaming.addEventListener('streamLoading', () => {
-        setLoadingStatus(LOADING_CONFIG.statusMessages.streamLoading);
-        setLoadingProgress(80);
-      });
-
-      pixelStreaming.addEventListener('playStream', () => {
-        setLoadingStatus(LOADING_CONFIG.statusMessages.playingStream);
-        setLoadingProgress(90);
-      });
-
-      pixelStreaming.addEventListener('webRtcFailed', () => {
-        setLoadingTitle('Connection Failed');
-        setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
-        setLoadingStatus(LOADING_CONFIG.statusMessages.failed);
-        setLoadingProgress(0);
-      });
-
-      pixelStreaming.addEventListener('webRtcDisconnected', () => {
-        if (!isReconnecting.current) {
-          setLoadingTitle('Disconnected');
-          setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
-          setLoadingStatus(LOADING_CONFIG.statusMessages.disconnected);
-          setIsLoading(true);
-          setLoadingProgress(0);
-        }
-      });
-
-      /* ─── AFK Warning ───────────────────────────────────────────── */
-      pixelStreaming.addEventListener('afkWarningActivate', (e) => {
-        setAfkWarning(true);
-        setAfkCountdown(e.data.countDown);
-        dismissAfkRef.current = e.data.dismissAfk;
-      });
-
-      pixelStreaming.addEventListener('afkWarningUpdate', (e) => {
-        setAfkCountdown(e.data.countDown);
-      });
-
-      pixelStreaming.addEventListener('afkWarningDeactivate', () => {
-        setAfkWarning(false);
-        dismissAfkRef.current = null;
-      });
-
-      pixelStreaming.addEventListener('afkTimedOut', () => {
-        setAfkWarning(false);
-        dismissAfkRef.current = null;
-        setLoadingTitle('Session Ended');
-        setLoadingSubtitle(LOADING_CONFIG.disconnectedSubtitle);
-        setLoadingStatus('You were disconnected due to inactivity.');
-        setIsLoading(true);
-        setLoadingProgress(0);
-      });
-
-      /* ─── Video Initialized ──────────────────────────────────────── */
-      appStream.onVideoInitialized = () => {
-        videoRef.current.append(appStream.rootElement);
-
-        // Hide default UI after DOM mount
-        const uiEl = appStream.rootElement?.querySelector('#uiFeatures');
-        if (uiEl) uiEl.style.display = 'none';
-
-        const videoElement = appStream.stream.videoElementParent.querySelector('video');
-        if (videoElement) {
-          videoElement.muted = true;
-          videoElement.focus();
-          videoElement.autoplay = true;
-          videoElement.tabIndex = 0;
-        }
-
-        // Mute the separate audio element the SDK creates
-        const audioEl = appStream.stream._webRtcController?.streamController?.audioElement;
-        if (audioEl) audioEl.muted = true;
-
-        // Dismiss loading screen
-        setLoadingProgress(100);
-        setTimeout(() => {
-          setIsLoading(false);
+      switch (s.kind) {
+        case 'idle':       // create() has resolved; connecting starts in a moment
+        case 'connecting': // also after the queue, and while a connection is rebuilt
           setQueuePosition(null);
+          // A dev session stays `connecting`, with no time limit, until Unreal connects.
+          setLoadingStatus(readUrlOptions().dev ? LOADING_CONFIG.statusMessages.devConnecting : LOADING_CONFIG.statusMessages.connecting);
+          break;
+        case 'awaitingPassword':
+          // A password project: nothing has started. The form below answers
+          // with stream.submitPassword().
+          break;
+        case 'queued':
+          setLoadingStatus(LOADING_CONFIG.statusMessages.inQueue);
+          break;
+        case 'streaming':
+          setIsLoading(false);
           setLoadingTitle(LOADING_CONFIG.title);
           setLoadingSubtitle(LOADING_CONFIG.subtitle);
-        }, 300);
-      };
-
-      appStream.onDisconnect = () => {};
-
-      /* ─── Queue ──────────────────────────────────────────────────── */
-      queueHandler((msg) => {
-        setQueuePosition(msg.position);
-        setLoadingStatus(LOADING_CONFIG.statusMessages.inQueue);
-      });
-
-      /* ─── UE Response Listener ───────────────────────────────────── */
-      pixelStreaming.addResponseEventListener('handle_responses', () => {
-        // Handle custom UE → Web messages here
-        // const data = JSON.parse(response);
-      });
+          setIsMuted(stream.muted); // streams start muted
+          // Known once the stream has its ticket (on a password project: after the password).
+          setChatAvailable(!!stream.voiceToken);
+          setResolutionOptions([
+            { label: 'Auto (Dashboard)', value: null },
+            ...stream.allowedResolutions.map((r) => ({ label: r.split(' ')[0], value: r })),
+          ]);
+          break;
+        case 'awaitingPlay':
+          // The stream is up and the browser refused to play it without a user
+          // gesture: the "Click to start" overlay calls stream.play().
+          setIsLoading(false);
+          break;
+        case 'recovering':
+          // No video arrived: the SDK is starting one fresh session.
+          setIsLoading(true);
+          setLoadingStatus(LOADING_CONFIG.statusMessages.recovering);
+          break;
+        case 'reconnecting':
+          // The connection dropped: the SDK restores it until s.deadlineMs.
+          setIsLoading(true);
+          setLoadingTitle(LOADING_CONFIG.reconnectingTitle);
+          setLoadingSubtitle(LOADING_CONFIG.reconnectingSubtitle);
+          // waitingForHost: a shared-session viewer waiting for the host, or a dev
+          // session waiting for your Unreal Editor (you stopped or restarted it).
+          setLoadingStatus(
+            s.waitingForHost
+              ? (readUrlOptions().dev ? LOADING_CONFIG.statusMessages.devWaiting : LOADING_CONFIG.statusMessages.waitingForHost)
+              : LOADING_CONFIG.statusMessages.reconnecting
+          );
+          break;
+        case 'ended': // final: the `ended` event below shows the card
+        default:      // a newer engine may add a kind
+          break;
+      }
     };
 
-    startPlay();
+    const offs = [
+      stream.on('state', onState),
 
-    return () => { mounted = false; };
-  }, [projectId, streamerId, sfuHost, sfuPlayer]);
+      /* ─── Loading steps inside `connecting` ──────────────────────────── */
+      stream.on('progress', ({ stage }) => {
+        if (PROGRESS_BY_STAGE[stage] !== undefined) setLoadingProgress(PROGRESS_BY_STAGE[stage]);
+        if (LOADING_CONFIG.statusMessages[stage]) setLoadingStatus(LOADING_CONFIG.statusMessages[stage]);
+      }),
 
+      stream.on('queue', ({ position }) => setQueuePosition(position)),
+
+      /* ─── Session ids ────────────────────────────────────────────────── */
+      // The ids shown in your Streampixel analytics: store them to link a session
+      // to your own user. Fires again with new ids when the SDK recovers into a
+      // fresh session.
+      stream.on('session', ({ sessionId, streamerId }) => {
+        setSessionInfo((info) => ({ ...info, sessionId, streamerId }));
+      }),
+
+      /* ─── Session end ────────────────────────────────────────────────── */
+      // `message` is the sentence for the viewer. code, reason and endKind are
+      // for your logs and for support.
+      stream.on('ended', ({ code, reason, endKind, message }) => {
+        console.info('[ended]', { code, reason, endKind });
+        setAfkWarning(false);
+        setOskText(null);
+        setRelayNotice(null);
+        setLinkPrompt(null);
+        setFileTransfer(null);
+        setChatOpen(false); // the chat leaves by itself when the stream ends
+        showFinalCard({
+          title: LOADING_CONFIG.endedTitle,
+          subtitle: message,
+          status: `Code ${code}`,
+          // `ended` is final. "Start again" destroys this stream and creates a new one.
+          action: { label: 'Start again', run: restart },
+        });
+      }),
+
+      /* ─── Live stats (1s cadence), rendered when the popup is open ───── */
+      // `?? '—'`: the engine is downloaded, and an older one may not send a field.
+      stream.on('stats', (s) => {
+        latestStats.current = {
+          FPS: s.fps,
+          'Latency (ms)': s.latencyMs,
+          Resolution: s.resolution ?? '—',
+          Codec: s.codec ?? '—',
+          'Bitrate (kbps)': s.bitrateKbps ?? '—',
+          'Encoder QP': s.avgQp ?? '—',
+          Quality: qualityBars.current ? `${'▮'.repeat(qualityBars.current)}${'▯'.repeat(4 - qualityBars.current)}` : '—',
+          'Frames Decoded': s.framesDecoded,
+          'Frames Dropped': s.framesDropped,
+          'Packets Lost': s.packetsLost ?? '—',
+          'Received (MB)': s.bytesReceived == null ? '—' : (s.bytesReceived / 1e6).toFixed(1),
+          Relay: s.relayTransport || 'direct',
+        };
+      }),
+
+      /* ─── No video: the SDK recovers by itself (state `recovering`) ──── */
+      stream.on('stalled', (diagnostics) => console.warn('[stalled]', diagnostics.verdict)),
+
+      /* ─── Relay fallback ─────────────────────────────────────────────── */
+      // UDP is blocked on the viewer's network and the stream is relayed over TCP
+      // or TLS, at lower quality. showWarning is the project's dashboard setting.
+      stream.on('relayFallback', ({ transport, showWarning }) => {
+        if (showWarning) setRelayNotice(transport || 'tcp');
+      }),
+
+      /* ─── AFK countdown ──────────────────────────────────────────────── */
+      stream.on('afkWarning', (w) => {
+        if (w.kind === 'countdown') {
+          setAfkWarning(true);
+          setAfkCountdown(w.secondsRemaining);
+          dismissAfkRef.current = w.dismiss;
+        } else {
+          setAfkWarning(false);
+          dismissAfkRef.current = null;
+        }
+      }),
+
+      /* ─── On-screen keyboard: UE focused a text field, or closed it ──── */
+      stream.on('osk', ({ contents }) => setOskText(contents ?? '')),
+      stream.on('oskHide', () => setOskText(null)),
+
+      /* ─── The application sent a plain https link ────────────────────── */
+      // Phones and tablets only open a tab from a tap: show a button that calls open().
+      stream.on('openUrl', (link) => setLinkPrompt(link)),
+
+      /* ─── The application sent a file ────────────────────────────────── */
+      stream.on('fileProgress', ({ received, total, name }) => {
+        setFileTransfer({ name: name || 'file', percent: total ? Math.round((received / total) * 100) : 0 });
+      }),
+      stream.on('file', ({ blob, name }) => setFileTransfer({ name: name || 'download', blob })),
+
+      /* ─── The application asked for a screenshot ─────────────────────── */
+      // The application sends `requestScreenshot`; the SDK captures the frame and
+      // raises `screenshot`. Saved under this app's own file name. (Without a
+      // listener the SDK downloads the PNG by itself.)
+      stream.on('screenshot', ({ dataUrl }) => savePng(dataUrl)),
+
+      /* ─── Encoder QP → quality bars ──────────────────────────────────── */
+      // The application's average encoder QP, about once a second, on a 0 to 51
+      // scale. Lower is a better picture. The bars are the "Quality" row of the
+      // stats popup. (The same number is `avgQp` in the `stats` event.)
+      stream.on('videoEncoderAvgQP', (avgQp) => {
+        if (!(avgQp > 0)) return;
+        if (avgQp <= 20) qualityBars.current = 4;
+        else if (avgQp <= 26) qualityBars.current = 3;
+        else if (avgQp <= 35) qualityBars.current = 2;
+        else qualityBars.current = 1;
+      }),
+
+      /* ─── UE → Web messages ──────────────────────────────────────────── */
+      stream.on('ueMessage', (message) => {
+        // Handle custom UE → Web messages here. Usually a JSON string:
+        // const data = JSON.parse(message);
+        //
+        // Two messages need no code here, because the SDK acts on them:
+        //   - a plain https link raises `openUrl` (above). The link is offered
+        //     as a button: phones and tablets open a tab only from a tap, so
+        //     calling window.open() from this handler is blocked there.
+        //   - `requestScreenshot` raises `screenshot` (above).
+      }),
+    ];
+
+
+    // create() resolves already in `awaitingPassword` on a password project: render the current state now.
+    onState(stream.state);
+
+    return () => offs.forEach((off) => off());
+  }, [restart, showFinalCard]);
+
+  /* =====================================================================
+     Start a stream; stop it when the component unmounts or restarts.
+
+     React runs this effect twice in development (<StrictMode>), and a fast
+     route change can unmount a component before create() has resolved. The
+     AbortSignal covers both: aborted before create() resolves, nothing
+     starts; aborted afterwards, the stream is destroyed. Without it, a
+     session would keep streaming with nobody watching.
+     ===================================================================== */
+  useEffect(() => {
+    if (!projectId) return undefined;
+    const url = readUrlOptions();
+    const ac = new AbortController();
+    let stream = null;
+    let unsubscribe = null;
+
+    setIsLoading(true);
+    setLoadingTitle(LOADING_CONFIG.title);
+    setLoadingSubtitle(LOADING_CONFIG.subtitle);
+    setLoadingStatus(LOADING_CONFIG.statusMessages.preparing);
+    setLoadingProgress(5);
+    setLoadingAction(null);
+
+    /* ───────────────────────────────────────────────────────────────────
+       StreamPixel.create() downloads the engine, looks the project up,
+       asks for the session ticket and resolves with the stream. Only
+       `appId` is needed: codec, resolution, inputs and idle time default
+       to the project's dashboard settings. Pass an option to change one.
+       ─────────────────────────────────────────────────────────────────── */
+    StreamPixel.create({
+      appId: projectId,
+      container: videoRef.current,
+      signal: ac.signal,
+      shared: url.shared,
+      dev: url.dev, // "Test locally": undefined for a normal session
+      engine: url.engine,
+      advanced: {
+        platformHost: url.platformHost,
+        telemetryHost: url.telemetryHost,
+        streamerId: url.streamerId,
+      },
+      // auth:         { mode: 'ticket', ticket }, // "Your app only": the WHOLE response of your server's ticket request
+      // codec:        { primary: 'AV1', fallback: 'H264' },
+      // resolution:   { start: '1080p (1920x1080)', mode: 'dynamic' },
+      // bitrate:      { min: 1_000, max: 20_000 }, // kilobits per second: 1 to 20 Mbps
+      // input:        { mouse: true, keyboard: true, touch: true },
+      // media:        { mic: false, camera: false },
+      // launchParams: { unit: 'A-12', lang: 'fr' },
+      // afk:          { timeoutSec: 300 },
+      // telemetry:    'standard',
+    })
+      .then((created) => {
+        if (ac.signal.aborted) return;
+        stream = created;
+        streamRef.current = stream;
+        window.spStream = stream; // handy for the browser console
+        setSessionInfo({ engineVersion: stream.engineVersion });
+        // Attach listeners directly after create(): `session` and the first
+        // `connecting` fire one moment later.
+        unsubscribe = subscribe(stream);
+      })
+      .catch((err) => {
+        // The cleanup below aborted `signal` (create() rejects with AbortError): nothing started.
+        if (ac.signal.aborted || err?.name === 'AbortError') return;
+        console.error('[create]', err);
+        const { title, subtitle, status, retry, signInUrl, leaveDev } = describeCreateError(err);
+        let action = null;
+        if (signInUrl) action = { label: 'Sign in again', run: () => window.location.assign(signInUrl) };
+        else if (leaveDev) action = { label: 'Back to the uploaded build', run: () => switchTestLocally(null) };
+        else if (retry) action = { label: 'Try again', run: restart };
+        showFinalCard({ title: title || LOADING_CONFIG.unavailableTitle, subtitle, status, action });
+      });
+
+    return () => {
+      unsubscribe?.();   // destroy() announces `ended` before it drops listeners: stop listening first
+      ac.abort();        // before create() resolves: nothing starts. After: the stream is destroyed.
+      stream?.destroy(); // a stream that has already ended no longer follows the signal; safe to call twice
+      streamRef.current = null;
+
+      // Forget what belonged to that stream.
+      chatRef.current?.leave().catch(() => {});
+      chatRef.current = null;
+      latestStats.current = null;
+      dismissAfkRef.current = null;
+      setChatAvailable(false);
+      setChatOpen(false);
+      setChatJoined(false);
+      setChatMessages([]);
+      setMicOn(false);
+      setPasswordGate(null);
+      setPasswordError('');
+      setNeedsPlay(false);
+      setAfkWarning(false);
+      setOskText(null);
+      setRelayNotice(null);
+      setLinkPrompt(null);
+      setFileTransfer(null);
+      setStatsData(null);
+      setSessionInfo(null);
+      setDevNote('');
+      setResolutionOptions([]);
+      setCurrentResolution('Auto (Dashboard)');
+    };
+  }, [projectId, runId, subscribe, showFinalCard, restart]);
+
+  // Hard lockout on the password form: every attempt is refused for now.
+  // Clear it when the wait is over, so the form can be used again.
+  useEffect(() => {
+    if (!passwordGate?.hard) return undefined;
+    const timer = setTimeout(
+      () => setPasswordGate((gate) => (gate ? { kind: 'awaitingPassword' } : gate)),
+      (passwordGate.retryAfterSec ?? 60) * 1000
+    );
+    return () => clearTimeout(timer);
+  }, [passwordGate]);
 
   /* =====================================================================
      Event Handlers
      ===================================================================== */
 
+  const handlePasswordSubmit = useCallback(
+    (e) => {
+      e.preventDefault();
+      const stream = streamRef.current;
+      if (!stream || !password || passwordBusy) return;
+      setPasswordBusy(true);
+      setPasswordError('');
+      // Resolves for a right AND for a wrong password: the `awaitingPassword`
+      // state says which (wrong / locked / hard). Rejects with AuthError for a
+      // network error or a project that went offline; the state stays as it was.
+      stream
+        .submitPassword(password)
+        .catch((err) => setPasswordError(err.message))
+        .finally(() => setPasswordBusy(false));
+    },
+    [password, passwordBusy]
+  );
+
+  // `awaitingPlay`: playback must start from a click or tap.
+  const handlePlay = useCallback(() => {
+    streamRef.current?.play();
+  }, []);
+
   const handleDismissAfk = useCallback(() => {
     dismissAfkRef.current?.();
   }, []);
 
-  const toggleMute = useCallback(() => {
-    const newMuted = !isMuted;
+  const submitOsk = useCallback(() => {
+    if (oskText !== null) streamRef.current?.sendTextboxEntry(oskText);
+    setOskText(null);
+  }, [oskText]);
 
-    const videoElement = appStreamRef.current?.stream?.videoElementParent?.querySelector('video');
-    if (videoElement) videoElement.muted = newMuted;
+  // `openUrl`: open() must run inside this click.
+  const openLink = useCallback(() => {
+    linkPrompt?.open();
+    setLinkPrompt(null);
+  }, [linkPrompt]);
 
-    const audioEl = appStreamRef.current?.stream?._webRtcController?.streamController?.audioElement;
-    if (audioEl) {
-      audioEl.muted = newMuted;
-      if (!newMuted && audioEl.paused) audioEl.play().catch(() => {});
+  // `file`: save the Blob the application sent.
+  const saveFile = useCallback(() => {
+    if (!fileTransfer?.blob) return;
+    const url = URL.createObjectURL(fileTransfer.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileTransfer.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setFileTransfer(null);
+  }, [fileTransfer]);
+
+  /* ─── Chat: lazy-join the project room on first open ────────────────── */
+  const openChat = useCallback(async () => {
+    setChatOpen(true);
+    const stream = streamRef.current;
+    if (chatRef.current || !stream) return;
+    try {
+      // VoiceChat.for() returns a Promise: the chat code is downloaded on first use.
+      const chat = await VoiceChat.for(stream, {
+        userName: `Guest-${Math.floor(Math.random() * 1000)}`,
+        voice: false, // join muted; mic is opt-in below
+        // Not taken from the stream: pass the same platform host here.
+        platformHost: readUrlOptions().platformHost,
+      });
+      chat.on('message', (m) =>
+        setChatMessages((prev) => [...prev.slice(-99), { ...m, ts: Date.now() }])
+      );
+      chat.on('roster', setRoster);
+      chat.on('typing', () => {
+        setSomeoneTyping(true);
+        clearTimeout(typingTimer.current);
+        typingTimer.current = setTimeout(() => setSomeoneTyping(false), 2500);
+      });
+      chat.on('deviceError', (e) => console.warn('[chat]', e.message));
+      await chat.join();
+      if (streamRef.current !== stream) {
+        // The stream was replaced while the chat was joining.
+        chat.leave().catch(() => {});
+        return;
+      }
+      chatRef.current = chat;
+      setChatJoined(true);
+    } catch (err) {
+      console.error('Chat join failed:', err.message);
+      setChatMessages((prev) => [...prev, { from: 'system', text: `Chat unavailable: ${err.message}`, ts: Date.now() }]);
     }
+  }, []);
 
-    setIsMuted(newMuted);
-  }, [isMuted]);
+  const sendChat = useCallback(() => {
+    const text = chatInput.trim();
+    if (!text) return;
+    chatRef.current?.sendMessage(text);
+    setChatInput('');
+  }, [chatInput]);
+
+  const toggleChatMic = useCallback(async () => {
+    const next = !micOn;
+    const ok = await chatRef.current?.toggleMic(next);
+    setMicOn(next && ok !== false);
+  }, [micOn]);
+
+  useEffect(() => () => clearTimeout(typingTimer.current), []);
+
+  const toggleMute = useCallback(() => {
+    const audible = streamRef.current?.toggleAudio();
+    setIsMuted(!audible);
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -408,78 +727,126 @@ const App = () => {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
-  const toggleStats = useCallback(() => {
-    if (!showStats) {
-      const data = uiControlRef.current?.getStreamStats();
-      if (data) setStatsData(data);
-    }
-    setShowStats((prev) => !prev);
+  // While the stats popup is open, refresh from the 1s stats feed.
+  useEffect(() => {
+    if (!showStats) return undefined;
+    setStatsData(latestStats.current);
+    const id = setInterval(() => setStatsData({ ...(latestStats.current || {}) }), 1000);
+    return () => clearInterval(id);
   }, [showStats]);
+
+  const toggleStats = useCallback(() => setShowStats((prev) => !prev), []);
   const toggleSettings = useCallback(() => setShowSettings((prev) => !prev), []);
 
-  const RESOLUTION_OPTIONS = [
-    { label: 'Auto (Dashboard)', value: null },
-    { label: '480p', value: '854x480' },
-    { label: '720p', value: '1280x720' },
-    { label: '1080p', value: '1920x1080' },
-    { label: '1440p', value: '2560x1440' },
-    { label: '4K', value: '3840x2160' },
-  ];
-
   const handleResolutionChange = useCallback((option) => {
+    setShowSettings(false);
     if (option.value) {
-      uiControlRef.current?.handleResMax(option.value);
+      const match = option.value.match(/\((\d+)x(\d+)\)/);
+      // Returns the size that was sent (lowered to the project's maximum), or
+      // null when nothing was sent: no stream up, or a shared-session viewer
+      // (the size is the host's).
+      const applied = match && streamRef.current?.setResolution(Number(match[1]), Number(match[2]));
+      if (!applied) {
+        console.warn('[resolution] not applied:', option.value);
+        return;
+      }
     }
     setCurrentResolution(option.label);
-    setShowSettings(false);
   }, []);
 
   /* ─── Developer Tools Handlers ───────────────────────────────────── */
 
+  // send() and consoleCommand() return whether anything was sent. Nothing is
+  // queued: send again once the state is `streaming`.
   const handleConsoleCommand = useCallback((cmd) => {
-    pixelStreamingRef.current?.emitConsoleCommand(cmd);
+    const sent = streamRef.current?.consoleCommand(cmd);
+    setDevNote(
+      sent
+        ? `Sent: ${cmd}`
+        : 'Not sent. The stream is not up, or the application does not allow console commands (-AllowPixelStreamingCommands).'
+    );
   }, []);
 
   const handleSendToUE = useCallback((jsonStr) => {
+    let payload;
     try {
-      const descriptor = JSON.parse(jsonStr);
-      appStreamRef.current?.stream?.emitUIInteraction(descriptor);
+      payload = JSON.parse(jsonStr);
     } catch (e) {
-      console.error('Invalid JSON:', e.message);
+      setDevNote(`Invalid JSON: ${e.message}`);
+      return;
     }
+    const sent = streamRef.current?.send(payload);
+    setDevNote(sent ? 'Sent to the application.' : 'Not sent. The stream is not up.');
   }, []);
 
+  // Ends the session for good: `ended` fires with code 1000 and endKind 'user'.
   const handleDisconnect = useCallback(() => {
-    pixelStreamingRef.current?.disconnect();
+    streamRef.current?.disconnect();
   }, []);
 
-  const handleMicrophone = useCallback(async () => {
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      pixelStreamingRef.current?.unmuteMicrophone(true);
-    } catch (err) {
-      console.error('Microphone access denied:', err.message);
+  const handleScreenshot = useCallback(() => {
+    savePng(streamRef.current?.captureScreenshot());
+  }, []);
+
+  /* The "Test locally" switch in Developer Tools (see switchTestLocally above). */
+  const handleTestLocally = useCallback((sessionId) => {
+    if (!switchTestLocally(sessionId)) {
+      setDevNote('A dev session id looks like dev-1a2b3c: copy it from the Test Locally tab of the dashboard.');
     }
   }, []);
 
-  const handleCamera = useCallback(async () => {
-    try {
-      await navigator.mediaDevices.getUserMedia({ video: true });
-      pixelStreamingRef.current?.unmuteCamera(true);
-    } catch (err) {
-      console.error('Camera access denied:', err.message);
-    }
+  const handleDiagnostics = useCallback(async () => {
+    const diag = await streamRef.current?.getDiagnostics();
+    console.log('[diagnostics]', diag);
+    if (diag) window.alert(`Connection: ${diag.verdict}`);
+    else setDevNote('No connection to diagnose.');
   }, []);
-
 
   /* =====================================================================
-     Render
+     Render — everything below is EXAMPLE UI. The SDK draws only the video.
      ===================================================================== */
   return (
     <div className="containMain">
 
-      {/* Loading / Disconnected Screen */}
-      {isLoading && (
+      {/* Password Gate — state `awaitingPassword`, answered with stream.submitPassword() */}
+      {passwordGate && (
+        <div className="loading-overlay" style={{ backgroundColor: LOADING_CONFIG.backgroundColor }}>
+          {LOADING_CONFIG.logoUrl && (
+            <img src={LOADING_CONFIG.logoUrl} alt="Logo" className="loading-logo" />
+          )}
+          <h2 className="loading-title">Password Required</h2>
+          <p className="loading-subtitle">This stream is protected.</p>
+          <form onSubmit={handlePasswordSubmit} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <input
+              type="password"
+              value={password}
+              autoFocus
+              disabled={passwordGate.hard === true}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid #333', background: '#101012', color: '#eee' }}
+            />
+            <button
+              type="submit"
+              disabled={passwordGate.hard === true || passwordBusy}
+              style={{
+                padding: '10px 16px', borderRadius: 6, border: 'none', background: LOADING_CONFIG.accentColor, color: '#fff',
+                cursor: 'pointer', opacity: passwordGate.hard === true || passwordBusy ? 0.6 : 1,
+              }}
+            >
+              {passwordBusy ? 'Checking...' : 'Join'}
+            </button>
+          </form>
+          {(passwordError || passwordMessage(passwordGate)) && (
+            <p className="loading-status" style={{ color: '#ff7b7b' }}>
+              {passwordError || passwordMessage(passwordGate)}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Loading / Ended / Unavailable Screen */}
+      {isLoading && !passwordGate && (
         <div className="loading-overlay" style={{ backgroundColor: LOADING_CONFIG.backgroundColor }}>
           {LOADING_CONFIG.logoUrl && (
             <img src={LOADING_CONFIG.logoUrl} alt="Logo" className="loading-logo" />
@@ -498,6 +865,15 @@ const App = () => {
             </div>
           )}
           <p className="loading-status">{loadingStatus}</p>
+          {loadingAction && (
+            <button
+              className="afk-btn"
+              style={{ backgroundColor: LOADING_CONFIG.accentColor, marginTop: 8 }}
+              onClick={loadingAction.run}
+            >
+              {loadingAction.label}
+            </button>
+          )}
           {queuePosition !== null && (
             <div className="loading-queue">
               <p className="loading-queue-text">{LOADING_CONFIG.queueMessage(queuePosition)}</p>
@@ -509,8 +885,58 @@ const App = () => {
         </div>
       )}
 
-      {/* Video Container */}
+      {/* Video Container — the SDK puts its <video> in here. Keep it empty in
+          your JSX, and give it a width and a height (see index.css). */}
       <div id="videoElement" ref={videoRef} />
+
+      {/* Click to start — state `awaitingPlay`: the browser blocked autoplay */}
+      {needsPlay && (
+        <div className="afk-overlay" onClick={handlePlay}>
+          <div className="afk-card">
+            <h2 className="afk-title">Your stream is ready</h2>
+            <p className="afk-subtitle">Your browser needs a click before it plays video.</p>
+            {/* The click bubbles to the overlay: a press anywhere calls stream.play() */}
+            <button className="afk-btn" style={{ backgroundColor: LOADING_CONFIG.accentColor }}>
+              Click to start
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Notices — events `relayFallback`, `openUrl`, `fileProgress` and `file` */}
+      {(relayNotice || linkPrompt || fileTransfer) && (
+        <div className="notice-stack">
+          {relayNotice && (
+            <div className="notice">
+              <span>
+                Your network is blocking UDP, so the stream is relayed over {relayNotice.toUpperCase()},
+                which reduces quality.
+              </span>
+              <button className="dev-tools-btn" onClick={() => setRelayNotice(null)}>Dismiss</button>
+            </div>
+          )}
+          {linkPrompt && (
+            <div className="notice">
+              <span>The application wants to open {hostOf(linkPrompt.url)}</span>
+              <button className="dev-tools-btn" onClick={openLink}>Open</button>
+              <button className="dev-tools-btn" onClick={() => setLinkPrompt(null)}>Stay here</button>
+            </div>
+          )}
+          {fileTransfer && (
+            <div className="notice">
+              {fileTransfer.blob ? (
+                <>
+                  <span>{fileTransfer.name} is ready.</span>
+                  <button className="dev-tools-btn" onClick={saveFile}>Save</button>
+                  <button className="dev-tools-btn" onClick={() => setFileTransfer(null)}>Dismiss</button>
+                </>
+              ) : (
+                <span>Receiving {fileTransfer.name}... {fileTransfer.percent}%</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* AFK Warning Overlay */}
       {afkWarning && (
@@ -535,6 +961,109 @@ const App = () => {
             >
               I'm still here
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Chat (voice/text) — shown when the project has chat enabled */}
+      {chatAvailable && !isLoading && (
+        <button
+          onClick={() => (chatOpen ? setChatOpen(false) : openChat())}
+          title="Chat"
+          style={{
+            position: 'fixed', bottom: 20, left: 20, zIndex: 10010,
+            width: 44, height: 44, borderRadius: 22, border: 'none', cursor: 'pointer',
+            background: chatOpen ? LOADING_CONFIG.accentColor : 'rgba(20,20,26,.85)',
+            color: '#fff', fontSize: 20,
+          }}
+        >
+          💬
+        </button>
+      )}
+      {chatOpen && (
+        <div
+          style={{
+            position: 'fixed', bottom: 74, left: 20, zIndex: 10010, width: 300,
+            maxHeight: '55vh', display: 'flex', flexDirection: 'column',
+            background: 'rgba(16,16,20,.95)', border: '1px solid #2c2c34',
+            borderRadius: 12, color: '#e8e8ec', font: '13px/1.5 system-ui, sans-serif',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid #26262e' }}>
+            <strong style={{ flex: 1 }}>
+              Chat {chatJoined ? `· ${1 + roster.remoteParticipants.length} online` : '· joining…'}
+            </strong>
+            <button
+              onClick={toggleChatMic}
+              title={micOn ? 'Mute mic' : 'Unmute mic'}
+              style={{ border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
+                background: micOn ? LOADING_CONFIG.accentColor : '#3a3a42', color: '#fff' }}
+            >
+              {micOn ? '🎙' : '🔇'}
+            </button>
+            <button onClick={() => setChatOpen(false)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 16 }}>×</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {chatMessages.length === 0 && <span style={{ opacity: .5 }}>No messages yet.</span>}
+            {chatMessages.map((m, i) => (
+              <div key={i}>
+                <span style={{ color: m.from === 'You' ? LOADING_CONFIG.accentColor : '#9ab', fontWeight: 600 }}>{m.from}</span>{' '}
+                <span>{m.text}</span>
+              </div>
+            ))}
+            {someoneTyping && <span style={{ opacity: .5, fontStyle: 'italic' }}>someone is typing…</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 6, padding: 10, borderTop: '1px solid #26262e' }}>
+            <input
+              value={chatInput}
+              onChange={(e) => { setChatInput(e.target.value); chatRef.current?.sendTyping(); }}
+              onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') sendChat(); }}
+              placeholder="Message…"
+              style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #3a3a42', background: '#101014', color: '#eee', outline: 'none' }}
+            />
+            <button onClick={sendChat} style={{ border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', background: LOADING_CONFIG.accentColor, color: '#fff' }}>Send</button>
+          </div>
+        </div>
+      )}
+
+      {/* On-screen keyboard modal — UE requested text input */}
+      {oskText !== null && (
+        <div className="afk-overlay" onClick={() => setOskText(null)}>
+          <div className="afk-card" onClick={(e) => e.stopPropagation()}>
+            <h2 className="afk-title">Enter text</h2>
+            <p className="afk-subtitle">The application is asking for input</p>
+            <input
+              type="text"
+              value={oskText}
+              autoFocus
+              onChange={(e) => setOskText(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') submitOsk();
+                if (e.key === 'Escape') setOskText(null);
+              }}
+              style={{
+                width: '100%', boxSizing: 'border-box', margin: '12px 0',
+                padding: '12px 14px', borderRadius: 8, border: '1px solid #3a3a3e',
+                background: '#101012', color: '#eee', fontSize: 15, outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <button
+                className="afk-btn"
+                style={{ backgroundColor: LOADING_CONFIG.accentColor }}
+                onClick={submitOsk}
+              >
+                Send
+              </button>
+              <button
+                className="afk-btn"
+                style={{ backgroundColor: '#3a3a3e' }}
+                onClick={() => setOskText(null)}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -584,7 +1113,7 @@ const App = () => {
             </svg>
           </button>
 
-          {resolutionEnabled && (
+          {resolutionOptions.length > 1 && (
             <button className={`control-btn ${showSettings ? 'control-btn-active' : ''}`} onClick={toggleSettings} title="Settings">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3" />
@@ -604,7 +1133,7 @@ const App = () => {
         </div>
       )}
 
-      {/* Stats Popup — data from UIControl.getStreamStats() */}
+      {/* Stats Popup — live data from the SDK's `stats` event */}
       {showStats && (
         <div className="stats-popup">
           <div className="stats-popup-header">
@@ -616,7 +1145,7 @@ const App = () => {
               Object.entries(statsData).map(([key, val]) => (
                 <div className="stats-row" key={key}>
                   <span className="stats-label">{key}</span>
-                  <span className="stats-value">{val}</span>
+                  <span className="stats-value">{String(val)}</span>
                 </div>
               ))
             ) : (
@@ -626,7 +1155,7 @@ const App = () => {
         </div>
       )}
 
-      {/* Settings Popup (Resolution) */}
+      {/* Settings Popup (Resolution — options come from stream.allowedResolutions) */}
       {showSettings && (
         <div className="settings-popup">
           <div className="stats-popup-header">
@@ -634,7 +1163,7 @@ const App = () => {
             <button className="stats-popup-close" onClick={() => setShowSettings(false)}>&times;</button>
           </div>
           <div className="settings-popup-body">
-            {RESOLUTION_OPTIONS.map((option) => (
+            {resolutionOptions.map((option) => (
               <button
                 key={option.label}
                 className={`settings-option ${currentResolution === option.label ? 'settings-option-active' : ''}`}
@@ -656,10 +1185,11 @@ const App = () => {
       {SHOW_DEV_TOOLS && showDevTools && (
         <div className="dev-tools-popup">
           <div className="stats-popup-header">
-            <span className="stats-popup-title">Developer Tools</span>
+            <span className="stats-popup-title">Developer Tools (SDK {SDK_VERSION})</span>
             <button className="stats-popup-close" onClick={() => setShowDevTools(false)}>&times;</button>
           </div>
           <div className="stats-popup-body">
+            {devNote && <p className="dev-tools-note">{devNote}</p>}
             <div className="dev-tools-section">
               <label className="dev-tools-label">Console Command</label>
               <div className="dev-tools-row">
@@ -674,27 +1204,54 @@ const App = () => {
                 <button className="dev-tools-btn" onClick={() => handleSendToUE(uiInteractionJson)}>Send</button>
               </div>
             </div>
+            {/* Test locally: stream from your own Unreal Editor (the SDK's `dev` option).
+                Start a session in the dashboard's Test Locally tab, connect Unreal to
+                it, and enter the session id here. */}
+            <div className="dev-tools-section">
+              <label className="dev-tools-label">Test locally (your Unreal Editor)</label>
+              {activeDevSession ? (
+                <div className="dev-tools-row">
+                  <p className="dev-tools-note">On: {activeDevSession}</p>
+                  <button className="dev-tools-btn" onClick={() => handleTestLocally(null)}>Switch off</button>
+                </div>
+              ) : (
+                <div className="dev-tools-row">
+                  <input className="dev-tools-input" type="text" value={devSessionInput} onChange={(e) => setDevSessionInput(e.target.value.trim())} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') handleTestLocally(devSessionInput); }} placeholder="dev-1a2b3c" />
+                  <button className="dev-tools-btn" onClick={() => handleTestLocally(devSessionInput)}>Switch on</button>
+                </div>
+              )}
+            </div>
+            <div className="dev-tools-section">
+              <label className="dev-tools-label">Diagnostics & Capture</label>
+              <div className="dev-tools-row">
+                <button className="dev-tools-btn" onClick={handleDiagnostics}>Diagnostics</button>
+                <button className="dev-tools-btn" onClick={handleScreenshot}>Screenshot</button>
+              </div>
+            </div>
+            <div className="dev-tools-section">
+              <label className="dev-tools-label">Hovering Mouse</label>
+              <div className="dev-tools-row">
+                <button className="dev-tools-btn" onClick={() => streamRef.current?.setHoverMouse(true)}>Enable</button>
+                <button className="dev-tools-btn" onClick={() => streamRef.current?.setHoverMouse(false)}>Disable</button>
+              </div>
+            </div>
             <div className="dev-tools-section">
               <label className="dev-tools-label">Connection</label>
               <div className="dev-tools-row">
                 <button className="dev-tools-btn dev-tools-btn-danger" onClick={handleDisconnect}>Disconnect</button>
               </div>
             </div>
-            <div className="dev-tools-section">
-              <label className="dev-tools-label">Microphone & Camera</label>
-              <div className="dev-tools-row">
-                <button className="dev-tools-btn" onClick={handleMicrophone}>Enable Mic</button>
-                <button className="dev-tools-btn" onClick={handleCamera}>Enable Camera</button>
+            {/* The engine is downloaded by create(), so its version can differ from the
+                package's. The ids are from the `session` event; a shared-session host
+                gives its streamer id to viewers. */}
+            {sessionInfo && (
+              <div className="dev-tools-section">
+                <label className="dev-tools-label">Session</label>
+                <p className="dev-tools-note">Engine: {sessionInfo.engineVersion}</p>
+                {sessionInfo.sessionId && <p className="dev-tools-note">Session id: {sessionInfo.sessionId}</p>}
+                {sessionInfo.streamerId && <p className="dev-tools-note">Streamer id: {sessionInfo.streamerId}</p>}
               </div>
-            </div>
-
-            <div className="dev-tools-section">
-              <label className="dev-tools-label">Hovering Mouse</label>
-              <div className="dev-tools-row">
-                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.toggleHoveringMouse(true)}>Enable</button>
-                <button className="dev-tools-btn" onClick={() => uiControlRef.current?.toggleHoveringMouse(false)}>Disable</button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}

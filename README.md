@@ -1,929 +1,150 @@
-# Streampixel Web SDK — Example Application
+# Streampixel Web SDK example (v2, `@streampixel/web-sdk`)
 
-A React example demonstrating how to integrate the **Streampixel Web SDK** to stream Unreal Engine content directly into a browser via WebRTC. This repo serves as both a working starter and a complete feature reference.
+A React reference integration of the **Streampixel Web SDK v2**. It puts the stream of a Streampixel project inside a page and draws every screen a viewer needs around it: loading and queue, password form, "Click to start", idle warning, text input for phones, reconnecting, the end message, plus stats, a quality picker, chat and developer tools.
 
----
+The SDK draws nothing except the video. Every screen in this app is example code in [src/components/App.js](src/components/App.js) that you own: copy it, restyle it, or replace it.
 
-## Table of Contents
+> **Public beta.** The app is written against `@streampixel/web-sdk` 2.0.0-beta.1, installed from npm.
 
-- [Quick Start](#quick-start)
-- [Project Structure](#project-structure)
-- [Features at a Glance](#features-at-a-glance)
-- [Core Initialization & Configuration](#core-initialization--configuration)
-- [Connection Management](#connection-management)
-- [WebRTC Lifecycle Events](#webrtc-lifecycle-events)
-- [SFU — One-to-Many Streaming](#sfu--one-to-many-streaming)
-- [Video, Codec & Resolution](#video-codec--resolution)
-- [Bitrate & Quality Control](#bitrate--quality-control)
-- [Input Controls](#input-controls)
-- [Audio](#audio)
-- [AFK (Idle Timeout)](#afk-idle-timeout)
-- [Queue System](#queue-system)
-- [Reconnection](#reconnection)
-- [Stream Statistics](#stream-statistics)
-- [Sending Commands to Unreal Engine](#sending-commands-to-unreal-engine)
-- [Receiving Responses from Unreal Engine](#receiving-responses-from-unreal-engine)
-- [Voice & Text Chat](#voice--text-chat)
-- [Custom Loading Screen](#custom-loading-screen)
-- [UI Customization](#ui-customization)
-- [Developer Tools Panel](#developer-tools-panel)
-- [UIControl Methods Reference](#uicontrol-methods-reference)
-- [URL Query Parameters](#url-query-parameters)
-- [SDK Exports Reference](#sdk-exports-reference)
-- [Troubleshooting](#troubleshooting)
-- [License](#license)
+**The full reference is the SDK's own README.** It ships inside the package: after `npm install`, open `node_modules/@streampixel/web-sdk/README.md` (options, states, events, errors, end codes, shared sessions, chat, telemetry) and `MIGRATION.md` next to it (moving from the v1 SDK). This file only explains the example.
 
----
-
-## Quick Start
+## Run it
 
 ```bash
-git clone <repo-url>
-cd Streampixel-SDK-Example
 npm install
 npm start
+# open http://localhost:3000/<projectId>      (or /?appId=<projectId>)
 ```
 
-Open `http://localhost:3000/<YOUR_PROJECT_ID>` — replace with your Streampixel project ID from the dashboard.
+`<projectId>` is the project id from the Streampixel dashboard. `npm run build` makes the production build. `/?appId=<projectId>` works on any static host; for `/<projectId>` the host must answer every path with `index.html` (this repository has no hosting configuration of its own).
 
----
+URL parameters of this example:
 
-## Project Structure
+| Parameter | Meaning |
+|---|---|
+| `?platform=staging` | Use the staging platform instead of production (for SDK development). |
+| `?shared=host` | Shared session, host role: owns the session and the input. |
+| `?shared=viewer&hostStreamerId=<id>` | Watch a host's session. `<id>` is the host's streamer id (Developer Tools → Session on the host's page). |
+| `?streamerId=<id>` | Use your own id for this connection. |
+| `?engine=beta` | Run the next engine release instead of the stable one. |
+| `?dev=<session id>` | [Test locally](#test-locally-your-own-unreal-editor): stream from your own Unreal Editor instead of the uploaded build. `<session id>` is `dev-` and six characters, from the dashboard's Test Locally tab. |
 
-```
-src/
-├── index.js                  # React entry point — renders <App />
-├── index.css                 # Global styles (loading, controls, stats, AFK, dev tools)
-└── components/
-    └── App.js                # Full example — all SDK features with Developer Tools panel
-```
+## The package and the engine
 
-**`App.js`** demonstrates every SDK feature: loading screen, mute, fullscreen, stats, AFK handling, queue, reconnection, and a **Developer Tools panel** for console commands, textbox entry, UI interactions, connection control, microphone, resolution, and hovering mouse.
+The package you install is a small **loader**. The **engine**, the code that runs the stream, is downloaded by `StreamPixel.create()` from `https://js.streampixel.io` (mirror: `https://js-backup.streampixel.io`), signed and integrity-checked. Three consequences:
 
-### Developer Tools Toggle
+- **The engine can be older or newer than the package.** `SDK_VERSION` is the package, `stream.engineVersion` is the engine; the app shows both in Developer Tools. What this app uses is the behaviour of engine 2.0.0-beta.1: on an older engine some of it is missing (for example the stats fields `packetsLost` and `bytesReceived`, and the end codes 4100 to 4104).
+- **If the engine cannot be downloaded, `create()` rejects with `EngineLoadError`.** There is no copy in the package. The app shows "The player could not be loaded" with `err.reason` and a "Try again" button.
+- **A Content-Security-Policy must allow the hosts**, and the page must be served over `https` or from `localhost`:
 
-At the top of `App.js`, set `SHOW_DEV_TOOLS` to control visibility:
+  ```
+  script-src  https://js.streampixel.io https://js-backup.streampixel.io;
+  connect-src https://*.streampixel.io wss://*.streampixel.io;
+  ```
+
+  Chat also needs `wss://*.livekit.cloud https://*.livekit.cloud` in `connect-src`.
+
+## Starting and stopping a stream in React
 
 ```js
-const SHOW_DEV_TOOLS = true;  // Set to false to hide in production
+useEffect(() => {
+  const ac = new AbortController();
+  let stream, unsubscribe;
+
+  StreamPixel.create({ appId, container: ref.current, signal: ac.signal })
+    .then((s) => { stream = s; unsubscribe = subscribe(s); })   // attach listeners right away
+    .catch((err) => { if (err.name !== 'AbortError') showError(err); });
+
+  return () => {
+    unsubscribe?.();   // destroy() announces `ended` before it drops listeners
+    ac.abort();        // before create() resolves: nothing starts. After: the stream is destroyed.
+    stream?.destroy(); // a stream that has already ended no longer follows the signal
+  };
+}, [appId, runId]);
 ```
 
----
+Pass `signal` and abort it in the cleanup. React runs an effect twice in development under `<StrictMode>` (this app keeps StrictMode on), and a fast route change unmounts a component before `create()` has resolved. Without the signal, each of those leaves a session streaming with nobody watching.
 
-## Features at a Glance
+`ended` is final: a stream has no `connect()` or `reconnect()`. To start again, destroy the stream and create a new one. The app does this by changing `runId`, which re-runs the effect ("Start again" on the end card, "Try again" after a failed `create()`).
 
-| Feature | Description | In Example | Via |
-|---------|-------------|:----------:|-----|
-| [Core Streaming](#core-initialization--configuration) | Initialize SDK, connect to UE instance | Yes | Auto |
-| [Connection Management](#connection-management) | Connect, disconnect, reconnect | Yes | Dev Tools |
-| [WebRTC Events](#webrtc-lifecycle-events) | Track connection lifecycle stages | Yes | Auto |
-| [SFU Streaming](#sfu--one-to-many-streaming) | One-to-many broadcast mode | Yes | URL params |
-| [Codec Selection](#video-codec--resolution) | AV1, H264, VP9, VP8 with fallback | Yes | Config |
-| [Resolution Control](#video-codec--resolution) | Per-device, fixed/dynamic/crop modes | Yes | Dev Tools + Config |
-| [Bitrate & Quality](#bitrate--quality-control) | Min/max bitrate, quantization parameters | Yes | Config |
-| [Input Controls](#input-controls) | Mouse, keyboard, touch, gamepad, XR | Yes | Config |
-| [Audio Playback](#audio) | Mute/unmute stream audio (dual-element) | Yes | Controls + Dev Tools |
-| [Microphone Input](#audio) | Send mic audio to UE | Yes | Dev Tools |
-| [AFK Timeout](#afk-idle-timeout) | Custom idle warning overlay | Yes | Auto |
-| [Queue System](#queue-system) | Queue position tracking | Yes | Auto |
-| [Auto-Reconnection](#reconnection) | Reconnect on drop with state events | Yes | Auto |
-| [Stream Statistics](#stream-statistics) | FPS, bitrate, codec, RTT, resolution | Yes | Controls |
-| [Console Commands](#sending-commands-to-unreal-engine) | Send UE console commands (`stat fps`, etc.) | Yes | Dev Tools |
-| [UI Interaction](#sending-commands-to-unreal-engine) | Send custom JSON to UE | Yes | Dev Tools |
-| [Textbox Entry](#sending-commands-to-unreal-engine) | Send text to focused UE text field | Yes | Dev Tools |
-| [Receive from UE](#receiving-responses-from-unreal-engine) | Listen for custom UE responses | Yes | Auto |
-| [Hovering Mouse](#input-controls) | Toggle mouse hover events at runtime | Yes | Dev Tools |
-| [Voice & Text Chat](#voice--text-chat) | LiveKit-based voice rooms & messaging | — | SDK only |
-| [Custom Loading Screen](#custom-loading-screen) | Fully configurable loading overlay | Yes | Config |
-| [UI Customization](#ui-customization) | Hide default PS UI, custom controls | Yes | Auto |
+## What the app shows, and where
 
-> **Dev Tools** = Available in the Developer Tools panel (toggle via `SHOW_DEV_TOOLS` constant).
-> **Config** = Available via SDK config options in the `StreamPixelApplication()` call.
-> **SDK only** = Available in the SDK but not demonstrated in this example (see API reference below).
+| Feature | In `App.js` | SDK README section |
+|---|---|---|
+| Start, stop, start again | the effect "Start a stream", `restart` | React; Methods and properties → Session |
+| `create()` failed: `AuthError` kinds, `EngineLoadError`, wrong option | `describeCreateError` | Errors from `create()` |
+| Loading, queue, reconnecting, recovering | `onState`, the `progress` and `queue` listeners | States; Reconnecting and recovery |
+| Password form | `passwordGate`, `handlePasswordSubmit`, `passwordMessage` | Access → Password projects |
+| "Click to start" when the browser blocks autoplay | `needsPlay`, `handlePlay` | States (`awaitingPlay`) |
+| End card | the `ended` listener | How a session ends, and end codes |
+| Stats popup | the `stats` listener | Events → `StreamStats` |
+| Quality picker | `handleResolutionChange` | Methods and properties → Video, sound and input |
+| Idle warning | the `afkWarning` listener | Events |
+| Text input for phones | the `osk` and `oskHide` listeners, `submitOsk` | Events |
+| Links and files sent by the application, relay notice | the `openUrl`, `fileProgress`, `file` and `relayFallback` listeners | Events |
+| Voice and text chat | `openChat` | Voice, text and video chat |
+| Shared sessions | `readUrlOptions` | Shared sessions |
+| Test locally (your own Unreal Editor) | `readUrlOptions`, `switchTestLocally`, the switch in Developer Tools | Test locally |
+| Screenshot the application asked for | the `screenshot` listener, `savePng` | Events |
+| Picture quality bars from the encoder QP | the `videoEncoderAvgQP` listener, the "Quality" row of the stats popup | Events |
+| Messages and console commands to the application | Developer Tools handlers | Methods and properties → Talking to your application |
 
----
+Things worth knowing when you copy from it:
 
-## Core Initialization & Configuration
+- **States.** The app switches on `state.kind`: `idle`, `awaitingPassword`, `connecting`, `queued`, `streaming`, `awaitingPlay`, `recovering`, `reconnecting`, `ended`. Keep a `default` branch: a newer engine may add a kind.
+- **Passwords are a state, not an error.** On a password project `create()` resolves with `stream.state.kind === 'awaitingPassword'`, so render `stream.state` right after `create()`. Answer with `stream.submitPassword(text)`. It resolves for a right and for a wrong password; the state's `wrong`, `locked`, `hard` and `retryAfterSec` say what happened.
+- **Single sign-on needs no code.** The SDK sends the browser to the sign-in page and finishes the sign-in on the next `create()`. A refused sign-in rejects with kind `sso-failed`; the app shows its `message` and a "Sign in again" button for `ssoStartUrl`.
+- **The end message comes from the SDK.** `ended` carries `message`, a sentence for the viewer, with `code`, `reason` and `endKind` for your logs.
+- **`send()`, `consoleCommand()` and `setResolution()` say whether anything was sent.** Nothing is queued: `send()` returns `false` before the video is up. `setResolution()` returns the size that was sent, or `null`.
+- **Some events have a built-in action that runs only without a listener.** The app listens to `openUrl` and `file` (it shows a button, which phones and tablets need) and to `screenshot` (it saves the frame under its own file name). Without a listener the SDK opens the link, downloads the file or downloads the frame by itself.
+- **`VoiceChat.for()` returns a Promise**: `const chat = await VoiceChat.for(stream, { userName })`. The chat code is downloaded on first use. If you set `advanced.platformHost` on the stream, pass the same host to the chat.
+- **Units.** `bitrate` is in kilobits per second: `{ min: 1_000, max: 20_000 }` is 1 to 20 Mbps.
 
-### Basic Usage
+## Access: "Your app only"
+
+Public, password and single sign-on projects work in this app as it is. A project set to **Your app only** in the dashboard rejects with `AuthError` kind `server-ticket-required`: it only starts with a ticket that your own server requested.
+
+1. Your server calls `POST https://platform.streampixel.io/api/v1/stream/ticket` with the project's **server key** in the `x-server-key` header, after your own sign-in check. The server key never goes in a page.
+2. Your page passes **the whole response object** to the SDK: `auth: { mode: 'ticket', ticket }`. The ticket string alone is refused.
+3. Request a new ticket for every `create()`, a page reload included.
+
+The server code is in the SDK README, section "Your app only".
+
+## Test locally (your own Unreal Editor)
+
+"Test locally" streams from Unreal on your own machine instead of an uploaded build: nothing is uploaded, and the project may have no build at all. The app uses the SDK's `dev` option for it.
+
+1. **Dashboard.** Open the project, then the **Test Locally** tab, and start a session. Note the session id (`dev-` and six characters). The session lasts 2 hours.
+2. **Unreal.** With the Pixel Streaming plugin enabled, either paste the session's **Signalling server URL** into the Pixel Streaming toolbar and choose **Stream Level Editor**, or run a Standalone Game / packaged build with the session's **Launch argument** (there is one for Pixel Streaming 1 and one for Pixel Streaming 2, the plugin of Unreal Engine 5.5 and later).
+3. **This app.** Open `http://localhost:3000/<projectId>?dev=<session id>`. That is all a project without a build needs. While a stream is up, the same switch is in Developer Tools (control bar): type the session id under **Test locally** and press **Switch on**; **Switch off**, or removing `?dev=` from the address, returns to the uploaded build.
+
+In code it is one option (`readUrlOptions` and the `create()` call in `App.js`):
 
 ```js
-import { StreamPixelApplication } from 'streampixelsdk';
-
-const { appStream, pixelStreaming, queueHandler, UIControl, reconnectStream } =
-  await StreamPixelApplication({
-    appId: "your_project_id",   // Required — from Streampixel dashboard
-    AutoConnect: true,
-  });
+StreamPixel.create({ appId, container, dev: { sessionId: 'dev-1a2b3c' } });
 ```
 
-### Understanding `appId`
+While Unreal is not connected the loading screen says "Waiting for your Unreal Editor to connect..." and stays there, with no time limit. When you stop or restart Unreal the stream comes back by itself for up to 10 minutes. There is no idle timeout. A session id that does not belong to the project, or has expired, shows a card with "Back to the uploaded build". A project set to "Your app only" cannot be opened this way. The details are in the SDK README, section "Test locally".
 
-The `appId` is the **only required parameter**. It resolves all server-side configuration automatically:
+## Updating the SDK
 
-- Signaling server URL
-- TURN server credentials
-- UE instance pool & matchmaker routing
-- Session auth / tokens
+The SDK is installed from npm. To move to a newer version:
 
-You don't need to configure signaling URLs, TURN servers, ICE configs, or auth tokens on the client.
-
-### Full Configuration Reference
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| **`appId`** | `string` | **Required** | Project ID from Streampixel dashboard |
-| `AutoConnect` | `boolean` | `true` | Connect immediately on initialization |
-| `streamerId` | `string` | Auto-generated | Target a specific streamer instance |
-| `sfuHost` | `string` | `"false"` | SFU host mode (`"true"` / `"false"`) |
-| `sfuPlayer` | `string` | `"false"` | SFU viewer mode (`"true"` / `"false"`) |
-| `forceTurn` | `boolean` | `true` | Force TURN relay (helps behind strict firewalls) |
-| `AutoPlayVideo` | `boolean` | `true` | Auto-play video on load |
-| `StartVideoMuted` | `boolean` | `true` | Start with video audio muted |
-| `primaryCodec` | `string` | From project | Preferred codec: `"AV1"` `"H264"` `"VP9"` `"VP8"` |
-| `fallBackCodec` | `string` | From project | Fallback if primary not supported |
-| `maxStreamQuality` | `string` | From project | Max resolution cap (e.g., `"720p (1280x720)"`) |
-| `startResolution` | `string` | From project | Desktop starting resolution |
-| `startResolutionMobile` | `string` | From project | Mobile starting resolution |
-| `startResolutionTab` | `string` | From project | Tablet starting resolution |
-| `resolutionMode` | `string` | From project | `"Fixed Resolution Mode"` `"Dynamic Resolution Mode"` `"Crop on Resize Mode"` |
-| `resX` | `number` | From project | Custom resolution width (pixels) |
-| `resY` | `number` | From project | Custom resolution height (pixels) |
-| `resolution` | `boolean` | From project | Enable resolution control |
-| `minBitrate` | `number` | From project | Minimum bitrate (Mbps) |
-| `maxBitrate` | `number` | From project | Maximum bitrate (Mbps) |
-| `minQP` | `number` | From project | Min quantization parameter (1–51, lower = better) |
-| `maxQP` | `number` | From project | Max quantization parameter (-1 = no limit) |
-| `mouseInput` | `boolean` | From project | Enable mouse input |
-| `keyBoardInput` | `boolean` | From project | Enable keyboard input |
-| `touchInput` | `boolean` | From project | Enable touch input |
-| `gamepadInput` | `boolean` | From project | Enable gamepad/controller input |
-| `xrInput` | `boolean` | From project | Enable WebXR (VR/AR) input |
-| `hoverMouse` | `boolean` | From project | Send mouse hover/move events to UE |
-| `fakeMouseWithTouches` | `boolean` | From project | Convert touch events to mouse events |
-| `useMic` | `boolean` | From project | Enable microphone input (sent to UE) |
-| `useCamera` | `boolean` | From project | Enable webcam input (sent to UE) |
-| `showResolution` | `boolean` | From project | Show resolution control to the user |
-| `afktimeout` | `number` | From project | Idle timeout in seconds (1–7200) |
-
-### Return Values
-
-| Object | Description |
-|--------|-------------|
-| `appStream` | Application wrapper — DOM root, video lifecycle callbacks, overlays, stats panel |
-| `pixelStreaming` | Core SDK — event listeners, connect/disconnect, codec/bitrate, input control |
-| `queueHandler` | Register a callback to receive queue position updates |
-| `UIControl` | UI helpers — toggle audio, change resolution, toggle hover mouse, get stats |
-| `reconnectStream` | Reconnection lifecycle — emits state events on auto-reconnect |
-
----
-
-## Connection Management
-
-### Auto-Connect (Default)
-
-```js
-await StreamPixelApplication({ appId: "...", AutoConnect: true });
-// Connection starts immediately
+```bash
+npm install @streampixel/web-sdk@<version> --save-exact
+npm run build
 ```
 
-### Manual Connect / Disconnect / Reconnect
-
-```js
-const { pixelStreaming } = await StreamPixelApplication({ appId: "...", AutoConnect: false });
-
-// Connect manually
-pixelStreaming.connect();
-
-// Disconnect the stream
-pixelStreaming.disconnect();
-
-// Reconnect after disconnect
-pixelStreaming.reconnect();
-```
-
-> **Example:** The Developer Tools panel provides Connect, Reconnect, and Disconnect buttons.
-
-### Force TURN Relay
-
-For users behind strict firewalls or symmetric NAT:
-
-```js
-StreamPixelApplication({ appId: "...", forceTurn: true });
-```
-
-### Target a Specific Streamer
-
-```js
-StreamPixelApplication({ appId: "...", streamerId: "myInstance123" });
-```
-
-Or via URL: `http://localhost:3000/PROJECT_ID?streamerId=myInstance123`
-
----
-
-## WebRTC Lifecycle Events
-
-The SDK fires events as the WebRTC connection progresses. Use them to drive UI state, loading screens, or custom logic.
-
-```js
-pixelStreaming.addEventListener('webRtcAutoConnect',  () => { /* Auto-connect started */ });
-pixelStreaming.addEventListener('webRtcConnecting',   () => { /* Peer connection opening */ });
-pixelStreaming.addEventListener('webRtcSdp',          () => { /* SDP offer/answer exchanged */ });
-pixelStreaming.addEventListener('webRtcConnected',    () => { /* Peer connection established */ });
-pixelStreaming.addEventListener('streamLoading',      () => { /* Stream data arriving */ });
-pixelStreaming.addEventListener('playStream',         () => { /* Video about to play */ });
-pixelStreaming.addEventListener('videoInitialized',   () => { /* Stream is live */ });
-pixelStreaming.addEventListener('webRtcFailed',       () => { /* Connection failed */ });
-pixelStreaming.addEventListener('webRtcDisconnected', () => { /* Connection lost */ });
-```
-
-**Connection flow:**
-
-```
-webRtcAutoConnect → webRtcConnecting → webRtcSdp → webRtcConnected → streamLoading → playStream → videoInitialized
-                                                                                                      ↓
-                                                                                            Stream is live!
-```
-
-### Video Initialized Callback
-
-Called when the stream video element is ready in the DOM:
-
-```js
-appStream.onVideoInitialized = () => {
-  // Append the stream to your container
-  videoRef.current.append(appStream.rootElement);
-
-  // Access the video element
-  const video = appStream.stream.videoElementParent.querySelector("video");
-};
-
-appStream.onDisconnect = () => {
-  console.log("Disconnected");
-};
-```
-
----
-
-## SFU — One-to-Many Streaming
-
-SFU (Selective Forwarding Unit) enables **one UE instance to be viewed by multiple users** simultaneously.
-
-```
-                    ┌──── Viewer 1 (sfuPlayer=true)
-UE Instance ───→ SFU Server ──── Viewer 2 (sfuPlayer=true)
-(sfuHost=true)      └──── Viewer 3 (sfuPlayer=true)
-```
-
-### Roles
-
-| Role | Config | Description |
-|------|--------|-------------|
-| **Host** | `sfuHost: "true"` | Controls the UE instance. Only one host per session. |
-| **Viewer** | `sfuPlayer: "true"` | Watches the host's stream. Multiple viewers allowed. |
-| **Default** | (neither) | Standard 1:1 mode — each user gets their own UE instance. |
-
-### Usage
-
-```js
-// Host:
-StreamPixelApplication({ appId: "...", sfuHost: "true" });
-
-// Viewer:
-StreamPixelApplication({ appId: "...", sfuPlayer: "true" });
-```
-
-Or via URL:
-```
-Host:    https://yourdomain.com/PROJECT_ID?sfuHost=true
-Viewer:  https://yourdomain.com/PROJECT_ID?sfuPlayer=true&streamerId=hostInstance123
-```
-
-### When to Use SFU
-
-- Presentations / demos — one person controls, audience watches
-- Live events — stream a virtual experience to many viewers
-- Spectator mode — let others watch a session
-- Cost optimization — share one UE instance across many viewers
-
----
-
-## Video, Codec & Resolution
-
-### Codec Selection
-
-The SDK supports automatic codec negotiation with fallback:
-
-```js
-StreamPixelApplication({
-  appId: "...",
-  primaryCodec: "AV1",       // Preferred: "AV1" | "H264" | "VP9" | "VP8"
-  fallBackCodec: "H264",     // Used if primary not supported by browser
-});
-```
-
-Codec fallback logic: Primary → Fallback → H264 (default). AV1 requires UE > 5.3.
-
-### Resolution
-
-```js
-StreamPixelApplication({
-  appId: "...",
-  maxStreamQuality: "1080p (1920x1080)",
-
-  // Per-device starting resolution (auto-detected):
-  startResolution: "1080p (1920x1080)",       // Desktop
-  startResolutionMobile: "480p (854x480)",     // Mobile
-  startResolutionTab: "720p (1280x720)",       // Tablet
-
-  // Resolution mode:
-  resolutionMode: "Fixed Resolution Mode",
-  // Options:
-  //   "Fixed Resolution Mode"    — stream at exact resolution
-  //   "Dynamic Resolution Mode"  — adapt to viewport size
-  //   "Crop on Resize Mode"      — crop instead of stretch
-
-  // Custom resolution (alternative to preset strings):
-  resX: 1920,
-  resY: 1080,
-  resolution: true,           // Enable resolution control
-});
-```
-
-**Available presets:** `"360p (640x360)"` | `"480p (854x480)"` | `"720p (1280x720)"` | `"1080p (1920x1080)"` | `"1440p (2560x1440)"` | `"4K (3840x2160)"`
-
-### Device Detection
-
-The SDK automatically detects mobile, tablet, and desktop devices and applies the corresponding `startResolution` setting.
-
----
-
-## Bitrate & Quality Control
-
-```js
-StreamPixelApplication({
-  appId: "...",
-  minBitrate: 1,       // Minimum bitrate (Mbps)
-  maxBitrate: 100,     // Maximum bitrate (Mbps)
-  minQP: 20,           // Min quantization parameter (1–51, lower = better quality)
-  maxQP: -1,           // Max quantization parameter (-1 = no limit)
-});
-```
-
----
-
-## Input Controls
-
-All input settings default to your **Streampixel dashboard** configuration. Only pass these if you need to override them on the client side:
-
-```js
-StreamPixelApplication({
-  appId: "...",
-  // All of these default from your dashboard — only set to override:
-  mouseInput: true,            // Mouse clicks and position
-  keyBoardInput: true,         // Keyboard events
-  touchInput: true,            // Touch events (mobile/tablet)
-  gamepadInput: true,          // Gamepad/controller input
-  xrInput: true,               // WebXR (VR/AR) controller input
-  hoverMouse: true,            // Send mouse move/hover events to UE
-  fakeMouseWithTouches: false, // Convert touch events to mouse events
-});
-```
-
-### Runtime Toggle — Hovering Mouse
-
-```js
-UIControl.toggleHoveringMouse(true);   // Enable hover events
-UIControl.toggleHoveringMouse(false);  // Disable hover events
-```
-
-> **Example:** The Developer Tools panel has Enable/Disable buttons for hovering mouse.
-
----
-
-## Audio
-
-### Stream Audio (Playback)
-
-The SDK creates **two separate media elements** — a `<video>` element and a separate `<audio>` element. To properly mute/unmute, you must target both:
-
-```js
-// Mute/unmute video element
-const video = appStream.stream.videoElementParent.querySelector("video");
-video.muted = false;
-
-// Mute/unmute the SDK's separate audio element
-const audioEl = appStream.stream._webRtcController.streamController.audioElement;
-audioEl.muted = false;
-if (audioEl.paused) audioEl.play(); // Handle browser autoplay policy
-```
-
-Or use the UIControl shortcut:
-
-```js
-UIControl.toggleAudio(); // Toggles both elements
-```
-
-### Microphone Input (Send to UE)
-
-Send the user's microphone audio to the Unreal Engine instance:
-
-```js
-// Enable via config:
-StreamPixelApplication({ appId: "...", useMic: true });
-
-// Or enable at runtime:
-await navigator.mediaDevices.getUserMedia({ audio: true });
-pixelStreaming.unmuteMicrophone(true);
-```
-
-> **Example:** The Developer Tools panel has an "Enable Mic" button that requests microphone access and sends it to UE.
-
----
-
-## AFK (Idle Timeout)
-
-When the user is idle, the SDK triggers a warning before disconnecting. Configure the timeout and handle the events:
-
-### Configuration
-
-```js
-StreamPixelApplication({
-  appId: "...",
-  afktimeout: 120, // Seconds (1–7200)
-});
-```
-
-### Events
-
-```js
-pixelStreaming.addEventListener('afkWarningActivate', (e) => {
-  // e.data.countDown — seconds remaining
-  // e.data.dismissAfk — callback to reset the timer
-  showWarning(e.data.countDown);
-  dismissRef.current = e.data.dismissAfk;
-});
-
-pixelStreaming.addEventListener('afkWarningUpdate', (e) => {
-  updateCountdown(e.data.countDown); // Fires every second
-});
-
-pixelStreaming.addEventListener('afkWarningDeactivate', () => {
-  hideWarning(); // User interacted, warning dismissed
-});
-
-pixelStreaming.addEventListener('afkTimedOut', () => {
-  // Session disconnected due to inactivity
-});
-```
-
-### Custom Overlay
-
-The example replaces the default black-screen AFK overlay with a custom card UI featuring a countdown timer and "I'm still here" button. The default overlay is hidden via:
-
-```css
-#afkOverlay { display: none !important; }
-```
-
----
-
-## Queue System
-
-When all UE instances are busy, users are placed in a queue. The `queueHandler` callback fires with position updates:
-
-```js
-const { queueHandler } = await StreamPixelApplication({ appId: "..." });
-
-queueHandler((msg) => {
-  console.log("Queue position:", msg.position); // 1, 2, 3, ...
-  console.log("Message:", msg.message);          // "You are in Queue"
-});
-```
-
-The example shows the queue position automatically in the loading screen with a badge.
-
----
-
-## Reconnection
-
-The SDK automatically attempts to reconnect when the connection drops. The `reconnectStream` object emits state events:
-
-```js
-const { reconnectStream } = await StreamPixelApplication({ appId: "..." });
-
-reconnectStream.on("state", (data) => {
-  // data.status — current reconnection state
-  // data.code   — disconnect code (e.g., 4007)
-  // data.reason — disconnect reason string
-
-  switch (data.status) {
-    case "connecting":    // Initial reconnect attempt
-    case "reconnecting":  // Reconnect in progress
-    case "retrying":      // Retrying after a failed attempt
-    case "connected":     // Successfully reconnected
-    case "disconnected":  // Connection dropped
-    case "failed":        // All reconnect attempts exhausted (after ~60s)
-  }
-});
-```
-
-### Reconnection Flow
-
-```
-Connection lost → reconnecting → retrying (1..N) → connected → stream resumes
-                                       ↓
-                                    failed (all retries exhausted)
-```
-
-> **Example:** `App.js` wires reconnection states into the loading screen for seamless user feedback.
-
----
-
-## Stream Statistics
-
-### Receiving Stats via Event
-
-Stats are delivered periodically through the `statsReceived` event:
-
-```js
-pixelStreaming.addEventListener('statsReceived', (e) => {
-  const stats = e.data.aggregatedStats;
-  // stats.inboundVideoStats — bitrate, resolution, FPS, codec, frames, packets
-  // stats.inboundAudioStats — bitrate, codec
-  // stats.sessionStats      — RTT, duration
-  // stats.streamStats       — bytes received
-  // stats.codecs            — Map<codecId, { mimeType }> for codec name resolution
-});
-```
-
-### Available Stat Fields
-
-| Stat | Source | Description |
-|------|--------|-------------|
-| Video Bitrate (kbps) | `inboundVideoStats.bitrate` | Current video bitrate |
-| Audio Bitrate (kbps) | `inboundAudioStats.bitrate` | Current audio bitrate |
-| Video Resolution | `frameWidth` x `frameHeight` | Stream resolution |
-| Framerate (FPS) | `framesPerSecond` | Current frame rate |
-| Frames Decoded | `framesDecoded` | Total frames decoded |
-| Frames Dropped | `framesDropped` | Total frames dropped |
-| Packets Lost | `packetsLost` | Total packets lost |
-| Video Codec | Resolved from `codecs` Map | e.g., AV1, H264, VP9 |
-| Audio Codec | Resolved from `codecs` Map | e.g., opus |
-| Net RTT (ms) | `currentRoundTripTime * 1000` | Network round-trip time |
-| Decode Time (ms) | `totalDecodeTime / framesDecoded` | Average decode time |
-| Jitter Buffer (ms) | `jitterBufferDelay / emittedCount` | Jitter buffer delay |
-| Video QP | `qpSum` | Quantization parameter |
-| Duration | `sessionStats.duration` | Session duration |
-
-### Codec Name Resolution
-
-Codec IDs in stats (e.g., `RTCCodec_0_Inbound_96`) must be resolved via the `codecs` Map:
-
-```js
-const codecId = stats.inboundVideoStats.codecId;
-const mimeType = stats.codecs.get(codecId).mimeType; // "video/AV1"
-const codecName = mimeType.replace('video/', '');      // "AV1"
-```
-
-The example includes an `extractPSStats()` helper that does this automatically.
-
-### Triggering Stats Collection
-
-```js
-UIControl.getStreamStats(); // Triggers collection — listen via statsReceived event
-```
-
----
-
-## Sending Commands to Unreal Engine
-
-Three methods to communicate with your UE application:
-
-### 1. UI Interaction — Custom JSON
-
-Send arbitrary JSON payloads to your UE Blueprint/C++ handler:
-
-```js
-appStream.stream.emitUIInteraction({
-  message: { type: "setResolution", value: "1080p (1920x1080)" }
-});
-```
-
-> **Example:** The Developer Tools panel lets you type and send custom JSON payloads to UE.
-
-### 2. Console Command
-
-Execute UE console commands remotely:
-
-```js
-pixelStreaming.emitConsoleCommand("stat fps");
-pixelStreaming.emitConsoleCommand("r.SetRes 1920x1080f");
-```
-
-### 3. Text Input
-
-Send text as if typed into a focused UE text field:
-
-```js
-pixelStreaming.sendTextboxEntry("Hello from the web!");
-```
-
----
-
-## Receiving Responses from Unreal Engine
-
-Listen for custom messages sent from your UE application (Blueprint or C++):
-
-```js
-pixelStreaming.addResponseEventListener('handle_responses', (response) => {
-  const data = JSON.parse(response);
-  console.log("UE says:", data);
-  // Handle your custom UE → Web messages here
-});
-```
-
-The example registers this listener after SDK initialization.
-
----
-
-## Voice & Text Chat
-
-> **Note:** Voice & text chat is available in the SDK but is **not demonstrated in this example**. The API reference below shows how to integrate it in your own application.
-
-The SDK includes a **LiveKit-based voice and text chat** system via the `StreamPixelVoiceChat` class.
-
-### Initialization
-
-```js
-import { StreamPixelVoiceChat } from 'streampixelsdk';
-
-const voiceChat = new StreamPixelVoiceChat(
-  roomName,    // string — chat room identifier
-  userName,    // string — display name
-  voiceChat,   // boolean — enable voice chat
-  avatar,      // string — avatar URL or SVG string
-  micStart     // boolean — start with mic enabled
-);
-```
-
-### Methods
-
-| Method | Description |
-|--------|-------------|
-| `voiceChat.join()` | Join the voice/text chat room |
-| `voiceChat.leave()` | Leave the chat room |
-| `voiceChat.toggleMic()` | Toggle local microphone on/off |
-| `voiceChat.sendMessage(text)` | Send a text message to the room |
-| `voiceChat.muteAllRemote()` | Mute all remote participants (local only) |
-| `voiceChat.unmuteAllRemote()` | Unmute all remote participants |
-| `voiceChat.muteSelected(identity)` | Mute a specific participant |
-| `voiceChat.unmuteSelected(identity)` | Unmute a specific participant |
-
-### Event Callbacks
-
-```js
-// Receive text messages
-voiceChat.onMessage((msg) => {
-  // msg.from — sender name
-  // msg.text — message content
-  // msg.avatar — sender's avatar
-});
-
-// Track participants (join/leave/speaking)
-voiceChat.onParticipantUpdate((participants) => {
-  // participants.localParticipant — { id, avatar, speaking }
-  // participants.remoteParticipants — [{ id, avatar, speaking }]
-});
-```
-
-### Audio Groups
-
-Audio groups let users selectively mute/unmute individual participants. When you mute someone, it silences their audio from your end, but they can still hear you. Use `muteSelected(identity)` / `unmuteSelected(identity)` for individual control, or `muteAllRemote()` / `unmuteAllRemote()` for bulk control.
-
----
-
-## Custom Loading Screen
-
-The loading screen is fully customizable via the `LOADING_CONFIG` object:
-
-```js
-const LOADING_CONFIG = {
-  backgroundColor: '#18181A',
-  accentColor: '#4e9cff',
-  logoUrl: null,                     // e.g., '/Images/logo.png'
-  title: 'Connecting to Stream',
-  subtitle: 'Please wait...',
-  disconnectedSubtitle: 'The stream session has ended.',
-  showSpinner: true,
-  queueMessage: (pos) => `You are in queue at position ${pos}`,
-
-  statusMessages: {
-    initializing:     'Initializing...',
-    connecting:       'Connecting to server...',
-    webRtcConnecting: 'Establishing WebRTC connection...',
-    sdpNegotiation:   'Negotiating stream parameters...',
-    webRtcConnected:  'WebRTC connected, loading stream...',
-    streamLoading:    'Stream is loading...',
-    playingStream:    'Starting video playback...',
-    inQueue:          'Waiting in queue...',
-    failed:           'Connection failed. Please try again.',
-    disconnected:     'Disconnected from stream.',
-    reconnecting:     'Reconnecting to stream...',
-    retrying:         'Retrying connection...',
-    reconnected:      'Reconnected! Loading stream...',
-    reconnectFailed:  'Unable to reconnect. Please refresh the page.',
-  },
-
-  // Reconnection screen text:
-  reconnectingTitle:       'Reconnecting',
-  reconnectingSubtitle:    'Please wait while we restore your session...',
-  reconnectedTitle:        'Reconnected',
-  reconnectFailedTitle:    'Reconnection Failed',
-  reconnectFailedSubtitle: 'We were unable to restore your session.',
-};
-```
-
-The loading screen automatically:
-- Shows a **progress bar** that advances with each WebRTC lifecycle event
-- Displays **queue position** with a badge when waiting
-- Updates title/subtitle for **disconnect** and **failure** states
-- Hides spinner and progress bar on terminal states
-
-### Adding Custom Elements
-
-```jsx
-{/* Inside the loading overlay JSX */}
-<div className="loading-actions">
-  <button className="loading-btn" onClick={() => alert('Hello!')}>
-    Custom Button
-  </button>
-</div>
-```
-
----
-
-## UI Customization
-
-### Hiding the Default Pixel Streaming UI
-
-The SDK ships with a built-in overlay (settings, stats, fullscreen buttons). The example hides it:
-
-```css
-#uiFeatures { display: none !important; }
-#afkOverlay { display: none !important; }
-```
-
-Plus JS-based hiding after SDK init:
-
-```js
-const uiEl = appStream.rootElement?.querySelector('#uiFeatures');
-if (uiEl) uiEl.style.display = 'none';
-```
-
-### CSS Sections
-
-All styles are in `src/index.css` with clear section headers:
-
-| Section | Classes |
-|---------|---------|
-| Loading Screen | `.loading-overlay`, `.loading-spinner`, `.loading-title`, `.loading-progress-*` |
-| Stream Controls | `.stream-controls`, `.control-btn`, `.control-btn-active` |
-| Stats Popup | `.stats-popup`, `.stats-row`, `.stats-label`, `.stats-value` |
-| AFK Overlay | `.afk-overlay`, `.afk-card`, `.afk-countdown`, `.afk-btn` |
-| Developer Tools | `.dev-tools-popup`, `.dev-tools-section`, `.dev-tools-btn`, `.dev-tools-input` |
-
-### Adding Custom Control Buttons
-
-```jsx
-<div className="stream-controls">
-  {/* ... existing buttons ... */}
-  <button className="control-btn" onClick={myHandler} title="My Button">
-    <svg>...</svg>
-  </button>
-</div>
-```
-
----
-
-## Developer Tools Panel
-
-The example includes a built-in Developer Tools panel that demonstrates advanced SDK features. Toggle it with the terminal icon button in the bottom-right controls.
-
-### Visibility Toggle
-
-```js
-// At the top of App.js:
-const SHOW_DEV_TOOLS = true;  // Set to false to hide entirely in production
-```
-
-When `SHOW_DEV_TOOLS` is `false`, both the toggle button and the panel are completely removed from the DOM.
-
-### Panel Sections
-
-| Section | What It Does | SDK Method |
-|---------|-------------|------------|
-| Console Command | Send UE console commands (e.g., `stat fps`) | `pixelStreaming.emitConsoleCommand()` |
-| UI Interaction | Send custom JSON to UE Blueprint/C++ | `appStream.stream.emitUIInteraction()` |
-| Connection | Disconnect the stream | `pixelStreaming.disconnect()` |
-| Audio | Toggle stream audio, enable microphone | `UIControl.toggleAudio()`, `pixelStreaming.unmuteMicrophone()` |
-| Resolution | Switch between 480p / 720p / 1080p / 1440p | `UIControl.handleResMax()` |
-| Hovering Mouse | Enable/disable mouse hover events | `UIControl.toggleHoveringMouse()` |
-
----
-
-## UIControl Methods Reference
-
-| Method | Parameters | Description |
-|--------|-----------|-------------|
-| `toggleAudio()` | — | Toggle stream audio on/off (both video and audio elements) |
-| `handleResMax(value)` | `string` e.g. `"1280x720"` | Set maximum stream resolution |
-| `toggleHoveringMouse(value)` | `boolean` | Enable/disable mouse hover events sent to UE |
-| `getStreamStats()` | — | Trigger stats collection (receive via `statsReceived` event) |
-| `getResolution()` | — | Get available resolution options (if enabled in config) |
-
-```js
-UIControl.toggleAudio();
-UIControl.handleResMax('1920x1080');
-UIControl.toggleHoveringMouse(true);
-UIControl.getStreamStats();
-```
-
----
-
-## URL Query Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `streamerId` | `string` | — | Connect to a specific streamer instance |
-| `sfuHost` | `string` | `"false"` | Enable SFU host mode |
-| `sfuPlayer` | `string` | `"false"` | Enable SFU player/viewer mode |
-
-Example: `http://localhost:3000/PROJECT_ID?sfuPlayer=true&streamerId=myHost`
-
----
-
-## SDK Exports Reference
-
-The SDK re-exports these classes from Epic Games' Pixel Streaming libraries for advanced use cases:
-
-### Core
-
-| Export | Description |
-|--------|-------------|
-| `StreamPixelApplication` | Main SDK entry point |
-| `StreamPixelVoiceChat` | Voice & text chat class |
-| `PixelStreaming` | Core Pixel Streaming controller |
-| `WebRtcPlayerController` | WebRTC player control |
-| `WebXRController` | WebXR input controller |
-| `Config` | Configuration manager |
-
-### Settings
-
-`SettingBase`, `SettingFlag`, `SettingNumber`, `SettingOption`, `SettingText`
-`SettingUIBase`, `SettingUIFlag`, `SettingUINumber`, `SettingUIOption`, `SettingUIText`
-
-### UI / Overlays
-
-| Export | Description |
-|--------|-------------|
-| `Application` | Base application class |
-| `ConfigUI` | Configuration UI panel |
-| `AFKOverlay`, `ActionOverlay`, `ConnectOverlay`, `DisconnectOverlay` | Overlay components |
-| `ErrorOverlay`, `InfoOverlay`, `PlayOverlay`, `TextOverlay`, `OverlayBase` | Additional overlays |
-
-### Statistics
-
-`AggregatedStats`, `InboundVideoStats`, `InboundAudioStats`, `DataChannelStats`, `CandidatePairStats`, `CandidateStat`
-
-### Utilities
-
-| Export | Description |
-|--------|-------------|
-| `Logger` | Logging utility |
-| `MessageRegistry` | Message handling |
-| `SignallingProtocol` | Signalling protocol handler |
-| `AfkLogic` | AFK detection logic |
-| `LatencyTestResults` | Latency test data |
-| `Flags`, `ControlSchemeType`, `NumericParameters`, `TextParameters` | Enums & constants |
-
----
+The version is pinned exactly on purpose, so a build is the same on every machine. The player engine itself updates without a new install: the package is a small loader that fetches the current signed engine when a stream starts.
 
 ## Troubleshooting
 
-| Issue | Cause | Fix |
-|-------|-------|-----|
-| Black screen, no video | Incorrect project ID or UE not running | Verify `appId` and check Streampixel dashboard |
-| Audio not working | Separate `<audio>` element not unmuted | Mute both video + audio elements (see [Audio](#audio)) |
-| Stats show `[object Object]` | Raw AggregatedStats has nested objects | Use `extractPSStats()` to flatten them |
-| Default PS UI showing | `#uiFeatures` not hidden | Add CSS rule `#uiFeatures { display: none !important; }` |
-| Codec shows raw ID | Using `codecId` directly | Look up `stats.codecs.get(codecId).mimeType` |
-| AFK black screen | Default AFK overlay visible | Add `#afkOverlay { display: none !important; }` and handle AFK events |
-| Connection fails behind firewall | WebRTC peer-to-peer blocked | Set `forceTurn: true` in SDK config |
-| "Connecting..." on disconnect | Title/subtitle not updated | Use separate state for `loadingTitle` / `loadingSubtitle` |
-
----
-
-## License
-
-This example is provided for integration reference. The Streampixel Web SDK is proprietary — see your Streampixel license agreement for terms.
+- **"The player could not be loaded"**: `EngineLoadError`. The reason is on the card: usually the network, an ad blocker, or a Content-Security-Policy that does not allow the two engine hosts. Reason `manifest-too-old` means the engine hosts do not serve a release for this package version yet.
+- **Black container, no screens**: the SDK draws only the video. Render the states yourself, as this app does, or mount `@streampixel/ui`.
+- **Two sessions start in development**: `create()` was called without `signal`, or the cleanup does not abort it.
+- **The session ends with code `1008` as soon as it connects**: the page's origin is not in the project's allowed-domains list. The platform compares the exact origin.
+- **`send()` or `consoleCommand()` returns `false`**: the stream is not up yet. For console commands, the application must also be launched with `-AllowPixelStreamingCommands`.
+- **Chat button missing**: the project has chat switched off (`stream.voiceToken` is `undefined`), or the stream is not up yet.
+- **Waiting in the queue**: no GPU is free yet; the `queue` event carries the position.
+- **`ws://localhost:3000/ws` in the browser's developer tools**: webpack's hot reload, not the SDK.
+- **Failed telemetry requests under network throttling**: each telemetry request has a 1.5 second limit so that it never delays the stream.
