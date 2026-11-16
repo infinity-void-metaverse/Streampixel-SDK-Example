@@ -4,7 +4,7 @@ A React reference integration of the **Streampixel Web SDK v2**. It puts the str
 
 The SDK draws nothing except the video. Every screen in this app is example code in [src/components/App.js](src/components/App.js) that you own: copy it, restyle it, or replace it.
 
-> **Public beta.** The app is written against `@streampixel/web-sdk` 2.0.0-beta.1. This repository installs that version from a tarball in [vendor/](vendor); [Switching to the npm package](#switching-to-the-npm-package) is a one-line change.
+> **Public beta.** The app is written against `@streampixel/web-sdk` 2.0.0-beta.1, installed from npm.
 
 **The full reference is the SDK's own README.** It ships inside the package: after `npm install`, open `node_modules/@streampixel/web-sdk/README.md` (options, states, events, errors, end codes, shared sessions, chat, telemetry) and `MIGRATION.md` next to it (moving from the v1 SDK). This file only explains the example.
 
@@ -126,40 +126,16 @@ StreamPixel.create({ appId, container, dev: { sessionId: 'dev-1a2b3c' } });
 
 While Unreal is not connected the loading screen says "Waiting for your Unreal Editor to connect..." and stays there, with no time limit. When you stop or restart Unreal the stream comes back by itself for up to 10 minutes. There is no idle timeout. A session id that does not belong to the project, or has expired, shows a card with "Back to the uploaded build". A project set to "Your app only" cannot be opened this way. The details are in the SDK README, section "Test locally".
 
-## Switching to the npm package
+## Updating the SDK
 
-The dependency is one line in [package.json](package.json):
-
-```diff
--    "@streampixel/web-sdk": "file:vendor/streampixel-web-sdk-2.0.0-beta.1.tgz",
-+    "@streampixel/web-sdk": "2.0.0-beta.1",
-```
-
-Then:
+The SDK is installed from npm. To move to a newer version:
 
 ```bash
-npm install            # rewrites package-lock.json for the registry
-git rm -r vendor       # the tarball is no longer used
+npm install @streampixel/web-sdk@<version> --save-exact
 npm run build
 ```
 
-No source file changes: the imports are already `@streampixel/web-sdk` and `@streampixel/web-sdk/voice`. Do this once `npm view @streampixel/web-sdk@2.0.0-beta.1 version` answers.
-
-## Updating the vendored SDK
-
-Until then, a new SDK build is vendored like this:
-
-```bash
-# in the SDK repository (packages/core)
-npm run build && npm pack
-
-# here
-git rm vendor/streampixel-web-sdk-*.tgz
-cp <path>/streampixel-web-sdk-<version>.tgz vendor/
-npm install ./vendor/streampixel-web-sdk-<version>.tgz
-```
-
-Change the version whenever the content of the tarball changes: npm, Vercel and CI cache by name and version, so the same version with different bytes gives a stale install.
+The version is pinned exactly on purpose, so a build is the same on every machine. The player engine itself updates without a new install: the package is a small loader that fetches the current signed engine when a stream starts.
 
 ## Troubleshooting
 
