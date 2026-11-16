@@ -22,7 +22,6 @@ URL parameters of this example:
 
 | Parameter | Meaning |
 |---|---|
-| `?platform=staging` | Use the staging platform instead of production (for SDK development). |
 | `?shared=host` | Shared session, host role: owns the session and the input. |
 | `?shared=viewer&hostStreamerId=<id>` | Watch a host's session. `<id>` is the host's streamer id (Developer Tools → Session on the host's page). |
 | `?streamerId=<id>` | Use your own id for this connection. |

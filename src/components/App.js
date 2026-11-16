@@ -95,14 +95,10 @@ function switchTestLocally(sessionId) {
 /* This example's URL parameters (see the README). Production is the default. */
 function readUrlOptions() {
   const params = new URLSearchParams(window.location.search);
-  // ?platform=staging opts in to the staging control plane, for SDK development.
-  const staging = params.get('platform') === 'staging';
   // Shared session: ?shared=host, or ?shared=viewer&hostStreamerId=<id>
   const sharedParam = params.get('shared');
   const hostStreamerId = params.get('hostStreamerId');
   return {
-    platformHost: staging ? 'https://platform.staging.streampixel.io' : undefined,
-    telemetryHost: staging ? 'https://telemetry.staging.streampixel.io' : undefined,
     shared:
       sharedParam === 'host'
         ? { role: 'host' }
@@ -523,8 +519,6 @@ const App = () => {
       dev: url.dev, // "Test locally": undefined for a normal session
       engine: url.engine,
       advanced: {
-        platformHost: url.platformHost,
-        telemetryHost: url.telemetryHost,
         streamerId: url.streamerId,
       },
       // auth:         { mode: 'ticket', ticket }, // "Your app only": the WHOLE response of your server's ticket request
@@ -666,8 +660,6 @@ const App = () => {
       const chat = await VoiceChat.for(stream, {
         userName: `Guest-${Math.floor(Math.random() * 1000)}`,
         voice: false, // join muted; mic is opt-in below
-        // Not taken from the stream: pass the same platform host here.
-        platformHost: readUrlOptions().platformHost,
       });
       chat.on('message', (m) =>
         setChatMessages((prev) => [...prev.slice(-99), { ...m, ts: Date.now() }])
