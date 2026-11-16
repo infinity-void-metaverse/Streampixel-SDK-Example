@@ -8,3 +8,6 @@ build
 .env.production.local
 
 
+
+# local assistant settings: never committed
+.claude/
