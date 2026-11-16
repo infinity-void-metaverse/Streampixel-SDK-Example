@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { StreamPixel, AuthError, EngineLoadError, SDK_VERSION } from '@streampixel/web-sdk';
+import { Streampixel, AuthError, EngineLoadError, SDK_VERSION } from '@streampixel/web-sdk';
 import { VoiceChat } from '@streampixel/web-sdk/voice';
 
 /* =========================================================================
@@ -28,7 +28,7 @@ const LOADING_CONFIG = {
 
   statusMessages: {
     initializing: 'Initializing...',
-    preparing: 'Preparing your session...',          // StreamPixel.create() is running
+    preparing: 'Preparing your session...',          // Streampixel.create() is running
     connecting: 'Connecting to your application...', // states `idle` and `connecting`
     inQueue: 'Waiting in queue...',                  // state `queued`
     // The `progress` event tells the steps inside `connecting` apart:
@@ -114,7 +114,7 @@ function readUrlOptions() {
   };
 }
 
-/* What to tell the viewer when StreamPixel.create() rejects.
+/* What to tell the viewer when Streampixel.create() rejects.
    `retry` offers a "Try again" button; `signInUrl` a "Sign in again" button. */
 function describeCreateError(err) {
   if (err instanceof AuthError) {
@@ -184,7 +184,7 @@ function hostOf(url) {
 }
 
 const App = () => {
-  const streamRef = useRef(null);      // the current stream (StreamPixel.create() result)
+  const streamRef = useRef(null);      // the current stream (Streampixel.create() result)
   const videoRef = useRef(null);       // the container the SDK puts its <video> in
   const latestStats = useRef(null);    // updated every second by the stats event
 
@@ -506,12 +506,12 @@ const App = () => {
     setLoadingAction(null);
 
     /* ───────────────────────────────────────────────────────────────────
-       StreamPixel.create() downloads the engine, looks the project up,
+       Streampixel.create() downloads the engine, looks the project up,
        asks for the session ticket and resolves with the stream. Only
        `appId` is needed: codec, resolution, inputs and idle time default
        to the project's dashboard settings. Pass an option to change one.
        ─────────────────────────────────────────────────────────────────── */
-    StreamPixel.create({
+    Streampixel.create({
       appId: projectId,
       container: videoRef.current,
       signal: ac.signal,

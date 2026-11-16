@@ -4,7 +4,7 @@ A React reference integration of the **Streampixel Web SDK v2**. It puts the str
 
 The SDK draws nothing except the video. Every screen in this app is example code in [src/components/App.js](src/components/App.js) that you own: copy it, restyle it, or replace it.
 
-> **Public beta.** The app is written against `@streampixel/web-sdk` 2.0.0-beta.1, installed from npm.
+> **Public beta.** The app is written against `@streampixel/web-sdk` 2.0.0-beta.2, installed from npm.
 
 **The full reference is the SDK's own README.** It ships inside the package: after `npm install`, open `node_modules/@streampixel/web-sdk/README.md` (options, states, events, errors, end codes, shared sessions, chat, telemetry) and `MIGRATION.md` next to it (moving from the v1 SDK). This file only explains the example.
 
@@ -30,7 +30,7 @@ URL parameters of this example:
 
 ## The package and the engine
 
-The package you install is a small **loader**. The **engine**, the code that runs the stream, is downloaded by `StreamPixel.create()` from `https://js.streampixel.io` (mirror: `https://js-backup.streampixel.io`), signed and integrity-checked. Three consequences:
+The package you install is a small **loader**. The **engine**, the code that runs the stream, is downloaded by `Streampixel.create()` from `https://js.streampixel.io` (mirror: `https://js-backup.streampixel.io`), signed and integrity-checked. Three consequences:
 
 - **The engine can be older or newer than the package.** `SDK_VERSION` is the package, `stream.engineVersion` is the engine; the app shows both in Developer Tools. What this app uses is the behaviour of engine 2.0.0-beta.1: on an older engine some of it is missing (for example the stats fields `packetsLost` and `bytesReceived`, and the end codes 4100 to 4104).
 - **If the engine cannot be downloaded, `create()` rejects with `EngineLoadError`.** There is no copy in the package. The app shows "The player could not be loaded" with `err.reason` and a "Try again" button.
@@ -50,7 +50,7 @@ useEffect(() => {
   const ac = new AbortController();
   let stream, unsubscribe;
 
-  StreamPixel.create({ appId, container: ref.current, signal: ac.signal })
+  Streampixel.create({ appId, container: ref.current, signal: ac.signal })
     .then((s) => { stream = s; unsubscribe = subscribe(s); })   // attach listeners right away
     .catch((err) => { if (err.name !== 'AbortError') showError(err); });
 
@@ -120,7 +120,7 @@ The server code is in the SDK README, section "Your app only".
 In code it is one option (`readUrlOptions` and the `create()` call in `App.js`):
 
 ```js
-StreamPixel.create({ appId, container, dev: { sessionId: 'dev-1a2b3c' } });
+Streampixel.create({ appId, container, dev: { sessionId: 'dev-1a2b3c' } });
 ```
 
 While Unreal is not connected the loading screen says "Waiting for your Unreal Editor to connect..." and stays there, with no time limit. When you stop or restart Unreal the stream comes back by itself for up to 10 minutes. There is no idle timeout. A session id that does not belong to the project, or has expired, shows a card with "Back to the uploaded build". A project set to "Your app only" cannot be opened this way. The details are in the SDK README, section "Test locally".
